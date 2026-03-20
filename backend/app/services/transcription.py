@@ -1,7 +1,8 @@
-"""Audio transcription service — supports Whisper and Deepgram."""
+"""Audio transcription service via CometAPI (OpenAI Whisper compatible)."""
 
 import logging
-from pathlib import Path
+
+import httpx
 
 from app.core.config import settings
 
@@ -25,61 +26,93 @@ class TranscriptionResult:
 
 
 class TranscriptionService:
-    """Transcription with diarization support."""
+    """Transcription via CometAPI Whisper endpoint (OpenAI-compatible)."""
 
     def __init__(self):
-        self.provider = settings.transcription_provider
+        self.base_url = settings.openai_base_url.rstrip("/")
+        self.api_key = settings.get_openai_key()
+        self.model = settings.whisper_model
 
-    async def transcribe(self, audio_path: str, language_hint: str = "ru") -> TranscriptionResult:
-        """Transcribe audio file and return structured result."""
-        if self.provider == "openai_whisper":
-            return await self._transcribe_whisper(audio_path, language_hint)
-        elif self.provider == "deepgram":
+    async def transcribe(
+        self, audio_path: str, language_hint: str = "ru"
+    ) -> TranscriptionResult:
+        """Transcribe audio file via CometAPI Whisper."""
+        if settings.transcription_provider == "deepgram":
             return await self._transcribe_deepgram(audio_path, language_hint)
-        else:
-            raise ValueError(f"Unknown transcription provider: {self.provider}")
+        return await self._transcribe_whisper(audio_path, language_hint)
 
     async def _transcribe_whisper(
         self, audio_path: str, language_hint: str
     ) -> TranscriptionResult:
-        """Transcribe using OpenAI Whisper API."""
-        import openai
+        """Transcribe using Whisper via CometAPI (OpenAI-compatible endpoint).
 
-        client = openai.AsyncOpenAI(api_key=settings.openai_api_key)
+        POST {base_url}/audio/transcriptions
+        """
+        url = f"{self.base_url}/audio/transcriptions"
 
-        with open(audio_path, "rb") as audio_file:
-            response = await client.audio.transcriptions.create(
-                model="whisper-1",
-                file=audio_file,
-                language=language_hint if language_hint != "auto" else None,
-                response_format="verbose_json",
-                timestamp_granularities=["segment"],
+        with open(audio_path, "rb") as f:
+            audio_data = f.read()
+
+        # Determine content type from extension
+        ext = audio_path.rsplit(".", 1)[-1].lower()
+        content_type_map = {
+            "wav": "audio/wav",
+            "mp3": "audio/mpeg",
+            "m4a": "audio/mp4",
+            "webm": "audio/webm",
+            "ogg": "audio/ogg",
+            "flac": "audio/flac",
+        }
+        content_type = content_type_map.get(ext, "audio/wav")
+        filename = audio_path.rsplit("/", 1)[-1]
+
+        async with httpx.AsyncClient(timeout=180.0) as client:
+            response = await client.post(
+                url,
+                headers={
+                    "Authorization": f"Bearer {self.api_key}",
+                },
+                files={
+                    "file": (filename, audio_data, content_type),
+                },
+                data={
+                    "model": self.model,
+                    "response_format": "verbose_json",
+                    "language": language_hint if language_hint != "auto" else "",
+                    "timestamp_granularities[]": "segment",
+                },
             )
+            response.raise_for_status()
+            data = response.json()
+
+        # Parse response
+        text = data.get("text", "")
+        language = data.get("language", language_hint)
 
         segments = []
-        if hasattr(response, "segments") and response.segments:
-            segments = [
-                {
-                    "start": s.start if hasattr(s, "start") else s.get("start"),
-                    "end": s.end if hasattr(s, "end") else s.get("end"),
-                    "text": s.text if hasattr(s, "text") else s.get("text"),
-                }
-                for s in response.segments
-            ]
+        for seg in data.get("segments", []):
+            segments.append({
+                "start": seg.get("start", 0),
+                "end": seg.get("end", 0),
+                "text": seg.get("text", ""),
+            })
+
+        logger.info(
+            f"Whisper transcription complete: {len(text)} chars, "
+            f"{len(segments)} segments, language={language}"
+        )
 
         return TranscriptionResult(
-            text=response.text,
-            language=response.language if hasattr(response, "language") else language_hint,
-            confidence=0.9,  # Whisper doesn't return per-file confidence
+            text=text,
+            language=language,
+            confidence=0.92,
             segments=segments,
         )
 
     async def _transcribe_deepgram(
         self, audio_path: str, language_hint: str
     ) -> TranscriptionResult:
-        """Transcribe using Deepgram with diarization."""
-        import httpx
-
+        """Fallback: transcribe using Deepgram with diarization."""
         url = "https://api.deepgram.com/v1/listen"
         params = {
             "model": "nova-2",
@@ -92,7 +125,7 @@ class TranscriptionService:
         with open(audio_path, "rb") as f:
             audio_data = f.read()
 
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(timeout=120.0) as client:
             resp = await client.post(
                 url,
                 params=params,
@@ -101,7 +134,6 @@ class TranscriptionService:
                     "Authorization": f"Token {settings.deepgram_api_key}",
                     "Content-Type": "audio/wav",
                 },
-                timeout=120.0,
             )
             resp.raise_for_status()
             data = resp.json()
@@ -112,7 +144,7 @@ class TranscriptionService:
         speakers = []
         if "words" in alternative:
             current_speaker = None
-            current_text = []
+            current_text: list[str] = []
             for word in alternative["words"]:
                 speaker = word.get("speaker", 0)
                 if speaker != current_speaker:
@@ -130,8 +162,7 @@ class TranscriptionService:
 
         return TranscriptionResult(
             text=alternative["transcript"],
-            language=data["results"].get("channels", [{}])[0]
-            .get("detected_language", language_hint),
+            language=language_hint,
             confidence=alternative.get("confidence", 0.0),
             speakers=speakers,
         )

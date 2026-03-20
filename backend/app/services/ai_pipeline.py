@@ -1,10 +1,13 @@
-"""AI pipeline — event segmentation, extraction, summarization, coaching."""
+"""AI pipeline — event segmentation, extraction, summarization, coaching.
+
+Uses Claude via CometAPI (Anthropic-compatible endpoint).
+"""
 
 import json
 import logging
 from datetime import datetime
 
-import anthropic
+import httpx
 
 from app.core.config import settings
 
@@ -110,112 +113,97 @@ Write in the user's language.
 
 
 class AIPipeline:
-    """Orchestrates all AI processing: segmentation, extraction, summarization."""
+    """Orchestrates all AI processing via CometAPI (Anthropic Messages API compatible).
+
+    Endpoint: POST {base_url}/messages
+    Auth: x-api-key header
+    """
 
     def __init__(self):
-        self.client = anthropic.AsyncAnthropic(api_key=settings.anthropic_api_key)
+        self.base_url = settings.anthropic_base_url.rstrip("/")
+        self.api_key = settings.get_anthropic_key()
         self.model = settings.default_llm_model
+
+    async def _call_claude(
+        self, system: str, user_content: str, max_tokens: int = 4096
+    ) -> str:
+        """Send a message to Claude via CometAPI Anthropic-compatible endpoint."""
+        url = f"{self.base_url}/messages"
+
+        payload = {
+            "model": self.model,
+            "max_tokens": max_tokens,
+            "system": system,
+            "messages": [
+                {"role": "user", "content": user_content}
+            ],
+        }
+
+        headers = {
+            "x-api-key": self.api_key,
+            "anthropic-version": "2023-06-01",
+            "content-type": "application/json",
+        }
+
+        async with httpx.AsyncClient(timeout=120.0) as client:
+            response = await client.post(url, json=payload, headers=headers)
+            response.raise_for_status()
+            data = response.json()
+
+        # Anthropic Messages API response format
+        content = data.get("content", [])
+        if content and isinstance(content, list):
+            return content[0].get("text", "")
+        return ""
 
     async def segment_events(
         self, transcript: str, session_start: datetime
     ) -> list[dict]:
         """Segment transcript into semantic events."""
-        response = await self.client.messages.create(
-            model=self.model,
-            max_tokens=8192,
-            system=SEGMENTATION_PROMPT,
-            messages=[
-                {
-                    "role": "user",
-                    "content": (
-                        f"Session started at: {session_start.isoformat()}\n\n"
-                        f"Transcript:\n{transcript}"
-                    ),
-                }
-            ],
+        user_content = (
+            f"Session started at: {session_start.isoformat()}\n\n"
+            f"Transcript:\n{transcript}"
         )
-        return self._parse_json_response(response.content[0].text)
+        text = await self._call_claude(SEGMENTATION_PROMPT, user_content, max_tokens=8192)
+        return self._parse_json_response(text)
 
     async def generate_daily_summary(self, events: list[dict], date: str) -> dict:
         """Generate comprehensive daily summary with coaching."""
         events_text = json.dumps(events, ensure_ascii=False, indent=2)
-        response = await self.client.messages.create(
-            model=self.model,
-            max_tokens=4096,
-            system=DAILY_SUMMARY_PROMPT,
-            messages=[
-                {
-                    "role": "user",
-                    "content": f"Date: {date}\n\nEvents:\n{events_text}",
-                }
-            ],
-        )
-        return self._parse_json_response(response.content[0].text)
+        user_content = f"Date: {date}\n\nEvents:\n{events_text}"
+        text = await self._call_claude(DAILY_SUMMARY_PROMPT, user_content)
+        return self._parse_json_response(text)
 
     async def analyze_meeting(self, transcript: str, meeting_context: dict) -> dict:
         """Deep analysis of a specific meeting."""
         context_str = json.dumps(meeting_context, ensure_ascii=False)
-        response = await self.client.messages.create(
-            model=self.model,
-            max_tokens=4096,
-            system=MEETING_ANALYSIS_PROMPT,
-            messages=[
-                {
-                    "role": "user",
-                    "content": (
-                        f"Meeting context: {context_str}\n\n"
-                        f"Transcript:\n{transcript}"
-                    ),
-                }
-            ],
-        )
-        return self._parse_json_response(response.content[0].text)
+        user_content = f"Meeting context: {context_str}\n\nTranscript:\n{transcript}"
+        text = await self._call_claude(MEETING_ANALYSIS_PROMPT, user_content)
+        return self._parse_json_response(text)
 
     async def generate_coaching(self, events: list[dict]) -> dict:
         """Generate personal coaching feedback."""
         events_text = json.dumps(events, ensure_ascii=False, indent=2)
-        response = await self.client.messages.create(
-            model=self.model,
-            max_tokens=2048,
-            system=COACHING_PROMPT,
-            messages=[
-                {
-                    "role": "user",
-                    "content": f"Today's events:\n{events_text}",
-                }
-            ],
-        )
-        return self._parse_json_response(response.content[0].text)
+        user_content = f"Today's events:\n{events_text}"
+        text = await self._call_claude(COACHING_PROMPT, user_content, max_tokens=2048)
+        return self._parse_json_response(text)
 
     async def semantic_search(self, query: str, context_docs: list[str]) -> str:
         """Answer user query against their personal memory."""
         docs_text = "\n\n---\n\n".join(context_docs)
-        response = await self.client.messages.create(
-            model=self.model,
-            max_tokens=2048,
-            system=(
-                "You are LifeOS memory assistant. Answer the user's question based on their "
-                "personal events, meetings, ideas, and conversations. Be specific, cite sources. "
-                "If you don't have enough information, say so."
-            ),
-            messages=[
-                {
-                    "role": "user",
-                    "content": (
-                        f"My question: {query}\n\n"
-                        f"Relevant memories:\n{docs_text}"
-                    ),
-                }
-            ],
+        system = (
+            "You are LifeOS memory assistant. Answer the user's question based on their "
+            "personal events, meetings, ideas, and conversations. Be specific, cite sources. "
+            "If you don't have enough information, say so."
         )
-        return response.content[0].text
+        user_content = f"My question: {query}\n\nRelevant memories:\n{docs_text}"
+        return await self._call_claude(system, user_content, max_tokens=2048)
 
     def _parse_json_response(self, text: str) -> dict | list:
         """Extract JSON from LLM response, handling markdown code blocks."""
         text = text.strip()
         if text.startswith("```"):
             lines = text.split("\n")
-            # Remove first and last lines (```json and ```)
             json_lines = []
             in_block = False
             for line in lines:

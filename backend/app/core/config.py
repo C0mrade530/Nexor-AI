@@ -27,14 +27,22 @@ class Settings(BaseSettings):
     access_token_expire_minutes: int = 60 * 24 * 7  # 1 week
     algorithm: str = "HS256"
 
-    # AI / LLM
-    anthropic_api_key: str = ""
-    openai_api_key: str = ""  # for Whisper transcription
-    default_llm_provider: str = "anthropic"
+    # CometAPI — single API gateway for all AI services
+    cometapi_key: str = ""
+    cometapi_base_url: str = "https://api.cometapi.com/v1"
+
+    # Claude (via CometAPI — Anthropic-compatible)
+    anthropic_base_url: str = "https://api.cometapi.com/v1"
+    anthropic_api_key: str = ""  # falls back to cometapi_key
     default_llm_model: str = "claude-sonnet-4-20250514"
 
-    # Transcription
-    transcription_provider: str = "openai_whisper"  # "openai_whisper" | "deepgram"
+    # Whisper transcription (via CometAPI — OpenAI-compatible)
+    openai_base_url: str = "https://api.cometapi.com/v1"
+    openai_api_key: str = ""  # falls back to cometapi_key
+    whisper_model: str = "whisper-1"
+
+    # Transcription settings
+    transcription_provider: str = "whisper"  # "whisper" | "deepgram"
     deepgram_api_key: str = ""
     max_audio_chunk_seconds: int = 300  # 5 min chunks
 
@@ -52,6 +60,14 @@ class Settings(BaseSettings):
     chroma_persist_dir: str = "./chroma_data"
 
     model_config = {"env_file": ".env", "env_prefix": "LIFEOS_"}
+
+    def get_anthropic_key(self) -> str:
+        """Return Anthropic API key, falling back to CometAPI key."""
+        return self.anthropic_api_key or self.cometapi_key
+
+    def get_openai_key(self) -> str:
+        """Return OpenAI API key for Whisper, falling back to CometAPI key."""
+        return self.openai_api_key or self.cometapi_key
 
 
 settings = Settings()
