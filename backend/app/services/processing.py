@@ -1,8 +1,10 @@
 """Audio processing orchestrator — ties transcription, AI pipeline, and memory together."""
 
 import logging
+import uuid
 from datetime import datetime
 
+from app.core import store
 from app.services.ai_pipeline import ai_pipeline
 from app.services.memory import memory_service
 from app.services.transcription import transcription_service
@@ -11,7 +13,7 @@ logger = logging.getLogger(__name__)
 
 
 class ProcessingService:
-    """Orchestrates the full pipeline: audio → transcript → events → memory."""
+    """Orchestrates the full pipeline: audio -> transcript -> events -> memory."""
 
     async def process_session(
         self,
@@ -21,11 +23,7 @@ class ProcessingService:
         session_start: datetime,
         language_hint: str = "ru",
     ) -> dict:
-        """Process an entire audio session end-to-end.
-
-        Returns:
-            dict with transcript, events, and processing stats.
-        """
+        """Process an entire audio session end-to-end."""
         logger.info(f"Processing session {session_id} for user {user_id}")
 
         # Step 1: Transcribe all chunks
@@ -54,38 +52,75 @@ class ProcessingService:
                 "chunks_processed": len(audio_paths),
             }
 
-        # Step 2: Segment into events
-        logger.info(f"Segmenting transcript into events")
-        events = await ai_pipeline.segment_events(full_transcript, session_start)
+        # Step 2: Segment into events via Claude
+        logger.info("Segmenting transcript into events")
+        raw_events = await ai_pipeline.segment_events(full_transcript, session_start)
 
-        if isinstance(events, dict) and "raw_text" in events:
+        if isinstance(raw_events, dict) and "raw_text" in raw_events:
             logger.warning("Event segmentation returned raw text instead of structured data")
-            events = []
+            raw_events = []
 
-        # Step 3: Index events into memory
-        for event in events:
-            event_id = event.get("id", str(session_id) + f"_evt_{events.index(event)}")
+        # Step 3: Store events and index into memory
+        events_out = []
+        for i, event in enumerate(raw_events):
+            event_id = event.get("id") or str(uuid.uuid4())
+            event["id"] = event_id
+            event["session_id"] = session_id
             event["started_at"] = event.get("started_at", session_start.isoformat())
+            event["created_at"] = datetime.utcnow().isoformat()
+
+            # Save to shared in-memory store
+            store.events[event_id] = event
+            events_out.append(event)
+
+            # Index into vector memory
             await memory_service.index_event(user_id, event_id, event)
 
-        logger.info(f"Session {session_id}: {len(events)} events extracted")
+        # Update session status
+        if session_id in store.sessions:
+            store.sessions[session_id]["status"] = "processed"
+
+        logger.info(f"Session {session_id}: {len(events_out)} events extracted")
 
         return {
             "transcript": full_transcript,
-            "events": events,
+            "events": events_out,
             "chunks_processed": len(audio_paths),
             "chunk_results": chunk_results,
         }
 
     async def generate_daily_summary(
-        self, user_id: str, events: list[dict], date: str
+        self, user_id: str, date: str
     ) -> dict:
-        """Generate daily summary and coaching from events."""
-        summary = await ai_pipeline.generate_daily_summary(events, date)
-        coaching = await ai_pipeline.generate_coaching(events)
+        """Generate daily summary from all events of the given date."""
+        # Collect events for the date
+        date_events = [
+            e for e in store.events.values()
+            if e.get("started_at", "").startswith(date)
+        ]
+
+        if not date_events:
+            return {"error": "No events found for this date"}
+
+        summary = await ai_pipeline.generate_daily_summary(date_events, date)
+        coaching = await ai_pipeline.generate_coaching(date_events)
 
         if isinstance(coaching, dict) and "raw_text" not in coaching:
             summary["coaching_details"] = coaching
+
+        # Store summary
+        summary["id"] = str(uuid.uuid4())
+        summary["date"] = date
+        summary["created_at"] = datetime.utcnow().isoformat()
+        summary["total_events"] = len(date_events)
+        summary["total_meetings"] = len([
+            e for e in date_events if e.get("event_type") in ("meeting", "sales_call")
+        ])
+        summary["total_ideas"] = len([
+            e for e in date_events if e.get("event_type") == "idea"
+        ])
+
+        store.daily_summaries[date] = summary
 
         return summary
 
