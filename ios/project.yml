@@ -1,0 +1,63 @@
+name: LifeOS
+options:
+  bundleIdPrefix: com.lifeos
+  deploymentTarget:
+    iOS: "17.0"
+  xcodeVersion: "15.0"
+  createIntermediateGroups: true
+
+settings:
+  base:
+    SWIFT_VERSION: "5.9"
+    MARKETING_VERSION: "0.1.0"
+    CURRENT_PROJECT_VERSION: "1"
+    GENERATE_INFOPLIST_FILE: false
+    INFOPLIST_FILE: LifeOS/Info.plist
+    CODE_SIGN_ENTITLEMENTS: LifeOS/LifeOS.entitlements
+
+targets:
+  LifeOS:
+    type: application
+    platform: iOS
+    sources:
+      - path: LifeOS
+        excludes:
+          - "**/*.entitlements"
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.lifeos.app
+        INFOPLIST_FILE: LifeOS/Info.plist
+        CODE_SIGN_ENTITLEMENTS: LifeOS/LifeOS.entitlements
+        CODE_SIGN_STYLE: Automatic
+    info:
+      path: LifeOS/Info.plist
+    entitlements:
+      path: LifeOS/LifeOS.entitlements
+
+  LifeOSTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - path: LifeOSTests
+    dependencies:
+      - target: LifeOS
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.lifeos.app.tests
+
+schemes:
+  LifeOS:
+    build:
+      targets:
+        LifeOS: all
+        LifeOSTests: [test]
+    run:
+      config: Debug
+    test:
+      config: Debug
+      targets:
+        - LifeOSTests
+    profile:
+      config: Release
+    archive:
+      config: Release

@@ -4,17 +4,25 @@ import Foundation
 class APIClient {
     static let shared = APIClient()
 
-    private let baseURL: URL
+    private var baseURLString: String
     private let session: URLSession
     private var authToken: String?
 
-    init(baseURL: String = "https://api.lifeos.app/api/v1") {
-        self.baseURL = URL(string: baseURL)!
-        self.session = URLSession.shared
+    init(baseURL: String = "http://localhost:8000/api/v1") {
+        self.baseURLString = baseURL
+
+        let config = URLSessionConfiguration.default
+        config.timeoutIntervalForRequest = 30
+        config.timeoutIntervalForResource = 300
+        self.session = URLSession(configuration: config)
+    }
+
+    func updateBaseURL(_ url: String) {
+        baseURLString = url
     }
 
     func setAuthToken(_ token: String) {
-        self.authToken = token
+        authToken = token
     }
 
     // MARK: - Audio Sessions
@@ -29,7 +37,9 @@ class APIClient {
     }
 
     func uploadChunk(sessionId: String, audioData: Data, filename: String = "chunk.wav") async throws -> AudioChunkResponse {
-        let url = baseURL.appendingPathComponent("/audio/sessions/\(sessionId)/chunks")
+        guard let url = URL(string: "\(baseURLString)/audio/sessions/\(sessionId)/chunks") else {
+            throw APIError.invalidURL
+        }
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         addAuthHeader(&request)
@@ -46,8 +56,12 @@ class APIClient {
 
         request.httpBody = body
 
-        let (data, _) = try await session.data(for: request)
-        return try JSONDecoder().decode(AudioChunkResponse.self, from: data)
+        let (data, response) = try await session.data(for: request)
+        try validateResponse(response)
+
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        return try decoder.decode(AudioChunkResponse.self, from: data)
     }
 
     func finishSession(sessionId: String) async throws -> AudioSession {
@@ -55,6 +69,14 @@ class APIClient {
             "ended_at": ISO8601DateFormatter().string(from: Date())
         ]
         return try await post("/audio/sessions/\(sessionId)/finish", body: body)
+    }
+
+    func listSessions(limit: Int = 20) async throws -> [AudioSession] {
+        return try await get("/audio/sessions?limit=\(limit)")
+    }
+
+    func deleteSession(sessionId: String) async throws {
+        let _: EmptyResponse = try await delete("/audio/sessions/\(sessionId)")
     }
 
     // MARK: - Events
@@ -77,6 +99,14 @@ class APIClient {
 
     func getActionItems() async throws -> ActionItemsResponse {
         return try await get("/events/tasks")
+    }
+
+    func getEvent(id: String) async throws -> Event {
+        return try await get("/events/\(id)")
+    }
+
+    func deleteEvent(id: String) async throws {
+        let _: EmptyResponse = try await delete("/events/\(id)")
     }
 
     // MARK: - Search
@@ -105,34 +135,91 @@ class APIClient {
     // MARK: - Private Helpers
 
     private func get<T: Decodable>(_ path: String) async throws -> T {
-        let url = baseURL.appendingPathComponent(path)
+        guard let url = URL(string: "\(baseURLString)\(path)") else {
+            throw APIError.invalidURL
+        }
         var request = URLRequest(url: url)
         request.httpMethod = "GET"
         addAuthHeader(&request)
 
-        let (data, _) = try await session.data(for: request)
+        let (data, response) = try await session.data(for: request)
+        try validateResponse(response)
+
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
         return try decoder.decode(T.self, from: data)
     }
 
     private func post<T: Decodable>(_ path: String, body: [String: Any]) async throws -> T {
-        let url = baseURL.appendingPathComponent(path)
+        guard let url = URL(string: "\(baseURLString)\(path)") else {
+            throw APIError.invalidURL
+        }
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         addAuthHeader(&request)
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
 
-        let (data, _) = try await session.data(for: request)
+        let (data, response) = try await session.data(for: request)
+        try validateResponse(response)
+
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        return try decoder.decode(T.self, from: data)
+    }
+
+    private func delete<T: Decodable>(_ path: String) async throws -> T {
+        guard let url = URL(string: "\(baseURLString)\(path)") else {
+            throw APIError.invalidURL
+        }
+        var request = URLRequest(url: url)
+        request.httpMethod = "DELETE"
+        addAuthHeader(&request)
+
+        let (data, response) = try await session.data(for: request)
+        try validateResponse(response)
+
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
         return try decoder.decode(T.self, from: data)
     }
 
     private func addAuthHeader(_ request: inout URLRequest) {
-        if let token = authToken {
+        if let token = authToken, !token.isEmpty {
             request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         }
     }
+
+    private func validateResponse(_ response: URLResponse) throws {
+        guard let http = response as? HTTPURLResponse else {
+            throw APIError.invalidResponse
+        }
+        guard (200...299).contains(http.statusCode) else {
+            throw APIError.httpError(statusCode: http.statusCode)
+        }
+    }
+}
+
+// MARK: - Error Types
+
+enum APIError: LocalizedError {
+    case invalidURL
+    case invalidResponse
+    case httpError(statusCode: Int)
+
+    var errorDescription: String? {
+        switch self {
+        case .invalidURL:
+            return "Invalid server URL"
+        case .invalidResponse:
+            return "Invalid response from server"
+        case .httpError(let code):
+            return "Server error (HTTP \(code))"
+        }
+    }
+}
+
+/// For DELETE endpoints that return `{"status": "deleted"}`.
+struct EmptyResponse: Decodable {
+    let status: String?
 }
