@@ -4,199 +4,315 @@ struct DailySummaryView: View {
     @StateObject private var vm = DailySummaryViewModel()
 
     var body: some View {
-        NavigationView {
-            ScrollView {
-                if vm.isLoading {
-                    ProgressView("Loading summary...")
-                        .padding(.top, 60)
-                } else if let summary = vm.summary {
-                    SummaryCard(summary: summary)
-                        .padding()
-                } else {
-                    // Empty state
-                    VStack(spacing: 16) {
-                        Image(systemName: "doc.text")
-                            .font(.system(size: 48))
-                            .foregroundColor(.secondary)
-                        Text("No summary yet for today")
-                            .font(.headline)
-                            .foregroundColor(.secondary)
-                        Text("Record your day and the AI will generate insights, action items, and coaching feedback")
-                            .font(.subheadline)
-                            .foregroundColor(.secondary)
-                            .multilineTextAlignment(.center)
-                            .padding(.horizontal, 32)
+        ZStack {
+            Color.loBackgroundFallback.ignoresSafeArea()
+
+            ScrollView(showsIndicators: false) {
+                VStack(alignment: .leading, spacing: 0) {
+                    // Header
+                    HStack(alignment: .bottom) {
+                        Text("Today")
+                            .font(.loTitle)
+                            .foregroundColor(Color.loPrimaryFallback)
+                        Spacer()
+                        Text(Date().formatted(.dateTime.month(.abbreviated).day()))
+                            .font(.loCaption)
+                            .foregroundColor(Color.loTertiaryFallback)
                     }
-                    .padding(.top, 80)
-                }
+                    .padding(.horizontal, Spacing.lg)
+                    .padding(.top, Spacing.md)
+                    .padding(.bottom, Spacing.lg)
 
-                // Recent summaries
-                if !vm.recentSummaries.isEmpty {
-                    VStack(alignment: .leading, spacing: 12) {
-                        Text("Recent Days")
-                            .font(.headline)
-                            .padding(.horizontal)
-
-                        ForEach(vm.recentSummaries) { summary in
-                            NavigationLink(destination: SummaryDetailView(summary: summary)) {
-                                HStack {
-                                    VStack(alignment: .leading) {
-                                        Text(summary.headline)
-                                            .font(.subheadline.bold())
-                                            .foregroundColor(.primary)
-                                            .lineLimit(1)
-                                        Text(summary.date.formatted(date: .abbreviated, time: .omitted))
-                                            .font(.caption)
-                                            .foregroundColor(.secondary)
-                                    }
-                                    Spacer()
-                                    if let score = summary.effectivenessScore {
-                                        Text(String(format: "%.0f", score))
-                                            .font(.title3.bold())
-                                            .foregroundColor(scoreColor(score))
-                                    }
-                                }
-                                .padding()
-                                .background(Color(.systemGray6))
-                                .cornerRadius(12)
-                            }
-                            .padding(.horizontal)
+                    if vm.isLoading {
+                        VStack {
+                            Spacer(minLength: 120)
+                            ProgressView()
+                                .tint(Color.loTertiaryFallback)
+                            Spacer(minLength: 120)
                         }
+                        .frame(maxWidth: .infinity)
+                    } else if let summary = vm.summary {
+                        summaryContent(summary)
+                    } else {
+                        emptyState
                     }
-                    .padding(.top, 24)
+
+                    // History
+                    if !vm.recentSummaries.isEmpty {
+                        LOSectionHeader(title: "This week")
+
+                        VStack(spacing: Spacing.xs) {
+                            ForEach(vm.recentSummaries) { s in
+                                NavigationLink(destination: SummaryFullView(summary: s)) {
+                                    historyRow(s)
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+                        .padding(.horizontal, Spacing.lg)
+                        .padding(.bottom, Spacing.xxl)
+                    }
                 }
-            }
-            .navigationTitle("Daily Summary")
-            .task {
-                await vm.loadToday()
-                await vm.loadRecent()
             }
             .refreshable {
                 await vm.loadToday()
                 await vm.loadRecent()
             }
         }
+        .navigationBarHidden(true)
+        .task {
+            await vm.loadToday()
+            await vm.loadRecent()
+        }
     }
 
-    private func scoreColor(_ score: Double) -> Color {
-        if score >= 8 { return .green }
-        if score >= 5 { return .orange }
-        return .red
-    }
-}
+    // MARK: - Summary Content
 
-struct SummaryCard: View {
-    let summary: DailySummary
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
+    @ViewBuilder
+    private func summaryContent(_ summary: DailySummary) -> some View {
+        VStack(alignment: .leading, spacing: Spacing.lg) {
             // Headline
             Text(summary.headline)
-                .font(.title3.bold())
+                .font(.loHeadline)
+                .foregroundColor(Color.loPrimaryFallback)
+                .lineSpacing(2)
+                .padding(.horizontal, Spacing.lg)
 
-            // Stats row
-            HStack(spacing: 16) {
-                StatBadge(value: summary.totalEvents ?? 0, label: "Events", icon: "list.bullet")
-                StatBadge(value: summary.totalMeetings ?? 0, label: "Meetings", icon: "person.2")
-                StatBadge(value: summary.totalIdeas ?? 0, label: "Ideas", icon: "lightbulb")
-                if let mins = summary.totalRecordingMinutes {
-                    StatBadge(value: Int(mins), label: "Minutes", icon: "clock")
-                }
+            // Stats strip
+            HStack(spacing: 0) {
+                statCell(value: summary.totalEvents ?? 0, label: "Events")
+                statDivider
+                statCell(value: summary.totalMeetings ?? 0, label: "Meetings")
+                statDivider
+                statCell(value: summary.totalIdeas ?? 0, label: "Ideas")
+                statDivider
+                statCell(value: Int(summary.totalRecordingMinutes ?? 0), label: "Min")
             }
-
-            Divider()
+            .padding(.vertical, Spacing.md)
+            .loCardStyle()
+            .padding(.horizontal, Spacing.lg)
 
             // Summary text
             Text(summary.summary)
-                .font(.body)
+                .font(.loBody)
+                .foregroundColor(Color.loSecondaryFallback)
+                .lineSpacing(5)
+                .padding(.horizontal, Spacing.lg)
+
+            LODivider()
+                .padding(.horizontal, Spacing.lg)
 
             // Coaching
             if let coaching = summary.coachingFeedback {
-                GroupBox {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Label("Coaching", systemImage: "sparkles")
-                            .font(.subheadline.bold())
-                        Text(coaching)
-                            .font(.subheadline)
+                VStack(alignment: .leading, spacing: Spacing.sm) {
+                    HStack(spacing: Spacing.xs) {
+                        Image(systemName: "sparkle")
+                            .font(.system(size: 12, weight: .light))
+                            .foregroundColor(Color.loAccentFallback)
+                        Text("COACHING")
+                            .font(.loMicro)
+                            .tracking(1.2)
+                            .foregroundColor(Color.loTertiaryFallback)
                     }
-                    .frame(maxWidth: .infinity, alignment: .leading)
+
+                    Text(coaching)
+                        .font(.loBody)
+                        .foregroundColor(Color.loPrimaryFallback)
+                        .lineSpacing(4)
                 }
+                .padding(.horizontal, Spacing.lg)
             }
 
-            // Emotional state
+            // Emotional arc
             if let emotional = summary.emotionalStateSummary {
-                GroupBox {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Label("Emotional Arc", systemImage: "heart")
-                            .font(.subheadline.bold())
-                        Text(emotional)
-                            .font(.subheadline)
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                VStack(alignment: .leading, spacing: Spacing.sm) {
+                    Text("EMOTIONAL ARC")
+                        .font(.loMicro)
+                        .tracking(1.2)
+                        .foregroundColor(Color.loTertiaryFallback)
+                    Text(emotional)
+                        .font(.loCaption)
+                        .foregroundColor(Color.loSecondaryFallback)
+                        .lineSpacing(3)
                 }
+                .padding(.horizontal, Spacing.lg)
             }
 
-            // One thing for tomorrow
+            // Focus for tomorrow
             if let tomorrow = summary.oneThingForTomorrow {
-                GroupBox {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Label("Focus for Tomorrow", systemImage: "target")
-                            .font(.subheadline.bold())
-                            .foregroundColor(.blue)
+                VStack(alignment: .leading, spacing: Spacing.sm) {
+                    Text("TOMORROW")
+                        .font(.loMicro)
+                        .tracking(1.2)
+                        .foregroundColor(Color.loTertiaryFallback)
+
+                    HStack(alignment: .top, spacing: Spacing.sm) {
+                        Rectangle()
+                            .fill(Color.loAccentFallback)
+                            .frame(width: 2)
+
                         Text(tomorrow)
-                            .font(.body.bold())
+                            .font(.loHeadline)
+                            .foregroundColor(Color.loPrimaryFallback)
+                            .lineSpacing(2)
                     }
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .fixedSize(horizontal: false, vertical: true)
                 }
+                .padding(.horizontal, Spacing.lg)
             }
 
-            // Effectiveness score
+            // Score
             if let score = summary.effectivenessScore {
                 HStack {
-                    Text("Day Effectiveness")
-                        .font(.subheadline)
+                    Text("Effectiveness")
+                        .font(.loCaption)
+                        .foregroundColor(Color.loTertiaryFallback)
                     Spacer()
-                    Text(String(format: "%.1f / 10", score))
-                        .font(.title2.bold())
-                        .foregroundColor(score >= 7 ? .green : score >= 4 ? .orange : .red)
+
+                    // Minimal bar
+                    HStack(spacing: 2) {
+                        ForEach(0..<10, id: \.self) { i in
+                            RoundedRectangle(cornerRadius: 1)
+                                .fill(Double(i) < score
+                                      ? Color.loAccentFallback
+                                      : Color.loTertiaryFallback.opacity(0.15))
+                                .frame(width: 16, height: 4)
+                        }
+                    }
+
+                    Text(String(format: "%.0f", score))
+                        .font(.loMonoSmall)
+                        .foregroundColor(Color.loPrimaryFallback)
+                        .frame(width: 24, alignment: .trailing)
                 }
-                .padding()
-                .background(Color(.systemGray6))
-                .cornerRadius(12)
+                .padding(.horizontal, Spacing.lg)
             }
+
+            Spacer(minLength: Spacing.lg)
         }
     }
-}
 
-struct StatBadge: View {
-    let value: Int
-    let label: String
-    let icon: String
+    // MARK: - History Row
 
-    var body: some View {
-        VStack(spacing: 4) {
-            Image(systemName: icon)
-                .font(.caption)
-                .foregroundColor(.secondary)
-            Text("\(value)")
-                .font(.headline)
-            Text(label)
-                .font(.caption2)
-                .foregroundColor(.secondary)
+    private func historyRow(_ summary: DailySummary) -> some View {
+        HStack(spacing: Spacing.sm) {
+            VStack(alignment: .leading, spacing: Spacing.xxxs) {
+                Text(summary.date.formatted(.dateTime.weekday(.wide)))
+                    .font(.loCaption)
+                    .foregroundColor(Color.loPrimaryFallback)
+                Text(summary.headline)
+                    .font(.loMicro)
+                    .foregroundColor(Color.loSecondaryFallback)
+                    .lineLimit(1)
+            }
+            Spacer()
+            if let score = summary.effectivenessScore {
+                Text(String(format: "%.0f", score))
+                    .font(.loMonoSmall)
+                    .foregroundColor(score >= 7 ? Color.loPrimaryFallback : Color.loTertiaryFallback)
+            }
+        }
+        .padding(Spacing.sm)
+        .loCardStyle()
+    }
+
+    // MARK: - Empty State
+
+    private var emptyState: some View {
+        VStack(spacing: Spacing.sm) {
+            Spacer(minLength: 80)
+
+            Image(systemName: "text.alignleft")
+                .font(.system(size: 32, weight: .ultraLight))
+                .foregroundColor(Color.loTertiaryFallback)
+
+            Text("No summary yet")
+                .font(.loCaption)
+                .foregroundColor(Color.loTertiaryFallback)
+
+            Text("Record your day and the AI\nwill generate your summary")
+                .font(.loMicro)
+                .foregroundColor(Color.loTertiaryFallback.opacity(0.6))
+                .multilineTextAlignment(.center)
+
+            Spacer(minLength: 80)
         }
         .frame(maxWidth: .infinity)
     }
+
+    // MARK: - Helpers
+
+    private func statCell(value: Int, label: String) -> some View {
+        VStack(spacing: Spacing.xxxs) {
+            Text("\(value)")
+                .font(.loHeadline)
+                .foregroundColor(Color.loPrimaryFallback)
+            Text(label)
+                .font(.loMicro)
+                .foregroundColor(Color.loTertiaryFallback)
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+    private var statDivider: some View {
+        Rectangle()
+            .fill(Color.loTertiaryFallback.opacity(0.2))
+            .frame(width: 0.5, height: 28)
+    }
 }
 
-struct SummaryDetailView: View {
+// MARK: - Full Summary View
+
+struct SummaryFullView: View {
     let summary: DailySummary
 
     var body: some View {
-        ScrollView {
-            SummaryCard(summary: summary)
-                .padding()
+        ZStack {
+            Color.loBackgroundFallback.ignoresSafeArea()
+
+            ScrollView(showsIndicators: false) {
+                VStack(alignment: .leading, spacing: Spacing.lg) {
+                    Text(summary.headline)
+                        .font(.loTitle)
+                        .foregroundColor(Color.loPrimaryFallback)
+
+                    Text(summary.summary)
+                        .font(.loBody)
+                        .foregroundColor(Color.loSecondaryFallback)
+                        .lineSpacing(5)
+
+                    if let coaching = summary.coachingFeedback {
+                        LODivider()
+                        VStack(alignment: .leading, spacing: Spacing.sm) {
+                            Text("COACHING")
+                                .font(.loMicro)
+                                .tracking(1.2)
+                                .foregroundColor(Color.loTertiaryFallback)
+                            Text(coaching)
+                                .font(.loBody)
+                                .foregroundColor(Color.loPrimaryFallback)
+                                .lineSpacing(4)
+                        }
+                    }
+
+                    if let tomorrow = summary.oneThingForTomorrow {
+                        LODivider()
+                        VStack(alignment: .leading, spacing: Spacing.sm) {
+                            Text("FOCUS FOR TOMORROW")
+                                .font(.loMicro)
+                                .tracking(1.2)
+                                .foregroundColor(Color.loTertiaryFallback)
+                            Text(tomorrow)
+                                .font(.loHeadline)
+                                .foregroundColor(Color.loPrimaryFallback)
+                        }
+                    }
+
+                    Spacer(minLength: Spacing.xxl)
+                }
+                .padding(Spacing.lg)
+            }
         }
-        .navigationTitle(summary.date.formatted(date: .abbreviated, time: .omitted))
         .navigationBarTitleDisplayMode(.inline)
     }
 }

@@ -4,17 +4,37 @@ struct InboxView: View {
     @StateObject private var vm = InboxViewModel()
     @State private var selectedFilter: String = "all"
 
-    let filters = ["all", "meeting", "idea", "task", "commitment", "sales_call"]
+    let filters = ["all", "meeting", "idea", "task", "commitment", "follow_up"]
 
     var body: some View {
-        NavigationView {
+        ZStack {
+            Color.loBackgroundFallback.ignoresSafeArea()
+
             VStack(spacing: 0) {
-                // Filter chips
+                // Header
+                HStack(alignment: .bottom) {
+                    Text("Inbox")
+                        .font(.loTitle)
+                        .foregroundColor(Color.loPrimaryFallback)
+                    Spacer()
+                    if !vm.events.isEmpty {
+                        Text("\(vm.events.count)")
+                            .font(.loMonoSmall)
+                            .foregroundColor(Color.loTertiaryFallback)
+                    }
+                }
+                .padding(.horizontal, Spacing.lg)
+                .padding(.top, Spacing.md)
+                .padding(.bottom, Spacing.sm)
+
+                // Filters
                 ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 8) {
+                    HStack(spacing: Spacing.xs) {
                         ForEach(filters, id: \.self) { filter in
                             Button {
-                                selectedFilter = filter
+                                withAnimation(.easeInOut(duration: 0.2)) {
+                                    selectedFilter = filter
+                                }
                                 Task {
                                     if filter == "all" {
                                         await vm.loadEvents()
@@ -23,170 +43,132 @@ struct InboxView: View {
                                     }
                                 }
                             } label: {
-                                Text(filter.replacingOccurrences(of: "_", with: " ").capitalized)
-                                    .font(.subheadline)
-                                    .padding(.horizontal, 14)
-                                    .padding(.vertical, 7)
-                                    .background(selectedFilter == filter ? Color.blue : Color(.systemGray5))
-                                    .foregroundColor(selectedFilter == filter ? .white : .primary)
-                                    .cornerRadius(16)
+                                LOChip(
+                                    text: filter.replacingOccurrences(of: "_", with: " "),
+                                    isActive: selectedFilter == filter
+                                )
                             }
                         }
                     }
-                    .padding(.horizontal)
-                    .padding(.vertical, 8)
+                    .padding(.horizontal, Spacing.lg)
                 }
+                .padding(.bottom, Spacing.sm)
 
+                LODivider()
+
+                // Content
                 if vm.isLoading && vm.events.isEmpty {
                     Spacer()
-                    ProgressView("Loading events...")
+                    ProgressView()
+                        .tint(Color.loTertiaryFallback)
                     Spacer()
                 } else if vm.events.isEmpty {
                     Spacer()
-                    VStack(spacing: 12) {
-                        Image(systemName: "tray")
-                            .font(.system(size: 48))
-                            .foregroundColor(.secondary)
-                        Text("No events yet")
-                            .foregroundColor(.secondary)
-                        Text("Start recording to capture your day")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                    }
+                    emptyState
                     Spacer()
                 } else {
-                    List {
-                        ForEach(vm.events) { event in
-                            NavigationLink(destination: EventDetailView(event: event)) {
-                                EventCard(event: event)
+                    ScrollView {
+                        LazyVStack(spacing: 0) {
+                            ForEach(vm.events) { event in
+                                NavigationLink(destination: EventDetailView(event: event)) {
+                                    MinimalEventRow(event: event)
+                                }
+                                .buttonStyle(.plain)
+                                LODivider()
+                                    .padding(.leading, Spacing.xxl + Spacing.lg)
                             }
                         }
                     }
-                    .listStyle(.plain)
                     .refreshable { await vm.loadEvents() }
                 }
-
-                if let error = vm.errorMessage {
-                    Text(error)
-                        .font(.caption)
-                        .foregroundColor(.red)
-                        .padding(.horizontal)
-                }
             }
-            .navigationTitle("Inbox")
-            .task { await vm.loadEvents() }
+        }
+        .navigationBarHidden(true)
+        .task { await vm.loadEvents() }
+    }
+
+    private var emptyState: some View {
+        VStack(spacing: Spacing.sm) {
+            Image(systemName: "tray")
+                .font(.system(size: 32, weight: .ultraLight))
+                .foregroundColor(Color.loTertiaryFallback)
+            Text("Nothing here yet")
+                .font(.loCaption)
+                .foregroundColor(Color.loTertiaryFallback)
         }
     }
 }
 
-// MARK: - Event Card
+// MARK: - Minimal Event Row
 
-struct EventCard: View {
+struct MinimalEventRow: View {
     let event: Event
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                EventTypeBadge(type: event.eventType)
-                Spacer()
-                if let urgency = event.urgency {
-                    HStack(spacing: 2) {
-                        ForEach(0..<urgency, id: \.self) { _ in
-                            Image(systemName: "exclamationmark")
-                                .font(.caption2)
-                        }
+        HStack(alignment: .top, spacing: Spacing.sm) {
+            // Type icon
+            LOEventIcon(type: event.eventType)
+                .padding(.top, Spacing.xxxs)
+
+            VStack(alignment: .leading, spacing: Spacing.xxs) {
+                // Title
+                Text(event.title)
+                    .font(.loHeadline)
+                    .foregroundColor(Color.loPrimaryFallback)
+                    .lineLimit(2)
+                    .multilineTextAlignment(.leading)
+
+                // Summary
+                Text(event.summary)
+                    .font(.loCaption)
+                    .foregroundColor(Color.loSecondaryFallback)
+                    .lineLimit(2)
+                    .multilineTextAlignment(.leading)
+
+                // Metadata row
+                HStack(spacing: Spacing.sm) {
+                    if let items = event.actionItems, !items.isEmpty {
+                        metaLabel("\(items.count) tasks", icon: "square")
                     }
-                    .foregroundColor(urgency >= 4 ? .red : .secondary)
-                }
-            }
-
-            Text(event.title)
-                .font(.headline)
-                .lineLimit(2)
-
-            Text(event.summary)
-                .font(.subheadline)
-                .foregroundColor(.secondary)
-                .lineLimit(3)
-
-            HStack(spacing: 12) {
-                if let items = event.actionItems, !items.isEmpty {
-                    Label("\(items.count)", systemImage: "checkmark.circle")
-                        .font(.caption)
-                        .foregroundColor(.blue)
-                }
-                if let ideas = event.ideas, !ideas.isEmpty {
-                    Label("\(ideas.count)", systemImage: "lightbulb")
-                        .font(.caption)
-                        .foregroundColor(.yellow)
-                }
-                if let participants = event.participants, !participants.isEmpty {
-                    Label("\(participants.count)", systemImage: "person.2")
-                        .font(.caption)
-                        .foregroundColor(.green)
-                }
-            }
-
-            if let tags = event.tags, !tags.isEmpty {
-                HStack(spacing: 4) {
-                    ForEach(tags.prefix(3), id: \.self) { tag in
-                        Text(tag)
-                            .font(.caption2)
-                            .padding(.horizontal, 6)
-                            .padding(.vertical, 2)
-                            .background(Color(.systemGray5))
-                            .cornerRadius(4)
+                    if let ideas = event.ideas, !ideas.isEmpty {
+                        metaLabel("\(ideas.count) ideas", icon: "sparkle")
+                    }
+                    if let urgency = event.urgency, urgency >= 4 {
+                        metaLabel("urgent", icon: "exclamationmark")
+                            .foregroundColor(Color.loAccentFallback)
                     }
                 }
+                .padding(.top, Spacing.xxxs)
+            }
+
+            Spacer()
+
+            // Time
+            if let tone = event.emotionalTone {
+                Text(toneEmoji(tone))
+                    .font(.system(size: 14))
             }
         }
-        .padding(.vertical, 4)
-    }
-}
-
-// MARK: - Event Type Badge
-
-struct EventTypeBadge: View {
-    let type: String
-
-    var color: Color {
-        switch type {
-        case "meeting", "sales_call": return .blue
-        case "idea": return .orange
-        case "task": return .green
-        case "commitment": return .purple
-        case "decision": return .indigo
-        case "follow_up": return .red
-        case "personal_thought": return .teal
-        default: return .gray
-        }
+        .padding(.horizontal, Spacing.lg)
+        .padding(.vertical, Spacing.sm)
     }
 
-    var icon: String {
-        switch type {
-        case "meeting": return "person.2"
-        case "sales_call": return "phone"
-        case "idea": return "lightbulb"
-        case "task": return "checkmark.square"
-        case "commitment": return "handshake"
-        case "decision": return "arrow.triangle.branch"
-        case "follow_up": return "arrow.uturn.forward"
-        case "personal_thought": return "brain"
-        case "planning": return "calendar"
-        default: return "text.bubble"
-        }
-    }
-
-    var body: some View {
-        HStack(spacing: 4) {
+    private func metaLabel(_ text: String, icon: String) -> some View {
+        HStack(spacing: Spacing.xxxs) {
             Image(systemName: icon)
-            Text(type.replacingOccurrences(of: "_", with: " ").capitalized)
+                .font(.system(size: 9, weight: .light))
+            Text(text)
+                .font(.loMicro)
         }
-        .font(.caption.weight(.medium))
-        .padding(.horizontal, 8)
-        .padding(.vertical, 4)
-        .background(color.opacity(0.15))
-        .foregroundColor(color)
-        .cornerRadius(8)
+        .foregroundColor(Color.loTertiaryFallback)
+    }
+
+    private func toneEmoji(_ tone: String) -> String {
+        switch tone.lowercased() {
+        case "positive", "excited": return ""
+        case "negative", "stressed": return ""
+        case "neutral": return ""
+        default: return ""
+        }
     }
 }

@@ -6,13 +6,19 @@ struct LifeOSApp: App {
 
     var body: some Scene {
         WindowGroup {
-            if appState.isAuthenticated {
-                ContentView()
+            Group {
+                if appState.isAuthenticated {
+                    NavigationStack {
+                        ContentView()
+                    }
                     .environmentObject(appState)
-            } else {
-                OnboardingView()
-                    .environmentObject(appState)
+                } else {
+                    OnboardingView()
+                        .environmentObject(appState)
+                }
             }
+            .animation(.easeInOut(duration: 0.5), value: appState.isAuthenticated)
+            .preferredColorScheme(nil)  // follow system
         }
     }
 }
