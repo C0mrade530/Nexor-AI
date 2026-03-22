@@ -3,7 +3,7 @@
 Uses reverse-engineered Plaud API (api.plaud.ai) to:
 1. List recordings from Plaud device
 2. Download audio files (OPUS/MP3)
-3. Trigger LifeOS processing pipeline on synced recordings
+3. Trigger Nexor processing pipeline on synced recordings
 
 Authentication: Bearer token from plaud.ai web session.
 """
@@ -183,7 +183,7 @@ class PlaudSyncService:
         user_id: str = "demo-user",
         region: str = "us",
     ) -> dict:
-        """Sync a single Plaud recording into LifeOS.
+        """Sync a single Plaud recording into Nexor.
 
         Downloads audio → saves to storage → creates session → ready for processing.
         """

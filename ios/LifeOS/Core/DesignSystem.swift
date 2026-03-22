@@ -2,7 +2,7 @@ import SwiftUI
 
 // MARK: - Color Palette
 
-/// LifeOS minimal color system — monochrome base with single accent.
+/// Nexor minimal color system — monochrome base with single accent.
 extension Color {
     // Core
     static let loBackground = Color("LOBackground", bundle: nil)

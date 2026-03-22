@@ -1,7 +1,7 @@
 [project]
-name = "lifeos-backend"
+name = "nexor-backend"
 version = "0.1.0"
-description = "LifeOS - AI wearable memory assistant backend"
+description = "Nexor - AI wearable memory assistant backend"
 requires-python = ">=3.11"
 dependencies = [
     "fastapi>=0.115.0",

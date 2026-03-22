@@ -20,15 +20,15 @@ services:
   postgres:
     image: postgres:16-alpine
     environment:
-      POSTGRES_DB: lifeos
-      POSTGRES_USER: lifeos
-      POSTGRES_PASSWORD: lifeos
+      POSTGRES_DB: nexor
+      POSTGRES_USER: nexor
+      POSTGRES_PASSWORD: nexor
     ports:
       - "5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U lifeos -d lifeos"]
+      test: ["CMD-SHELL", "pg_isready -U nexor -d nexor"]
       interval: 5s
       timeout: 5s
       retries: 5

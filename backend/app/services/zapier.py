@@ -1,6 +1,6 @@
 """Zapier webhook integration — trigger external automations.
 
-Sends webhooks when key LifeOS events happen:
+Sends webhooks when key Nexor events happen:
 - New recording processed
 - Daily summary generated
 - New commitment/task/follow-up extracted

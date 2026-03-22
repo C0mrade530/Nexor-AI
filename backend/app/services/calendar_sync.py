@@ -17,7 +17,7 @@ GOOGLE_TASKS_API = "https://tasks.googleapis.com/tasks/v1"
 
 
 class CalendarSyncService:
-    """Syncs LifeOS events to Google Calendar and Tasks."""
+    """Syncs Nexor events to Google Calendar and Tasks."""
 
     async def create_calendar_event(
         self,
@@ -191,10 +191,10 @@ class CalendarSyncService:
 
         return {"synced": synced, "failed": failed}
 
-    async def get_or_create_lifeos_tasklist(
+    async def get_or_create_nexor_tasklist(
         self, access_token: str
     ) -> str:
-        """Get or create a LifeOS task list in Google Tasks."""
+        """Get or create a Nexor task list in Google Tasks."""
         headers = {
             "Authorization": f"Bearer {access_token}",
             "Content-Type": "application/json",
@@ -210,13 +210,13 @@ class CalendarSyncService:
             lists = response.json().get("items", [])
 
             for tl in lists:
-                if tl.get("title") == "LifeOS":
+                if tl.get("title") == "Nexor":
                     return tl["id"]
 
             # Create new list
             response = await client.post(
                 f"{GOOGLE_TASKS_API}/users/@me/lists",
-                json={"title": "LifeOS"},
+                json={"title": "Nexor"},
                 headers=headers,
             )
             response.raise_for_status()

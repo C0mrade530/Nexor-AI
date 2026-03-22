@@ -67,22 +67,22 @@ class AppState: ObservableObject {
     @Published var isAuthenticated = false
     @Published var serverURL: String {
         didSet {
-            UserDefaults.standard.set(serverURL, forKey: "lifeos_server_url")
+            UserDefaults.standard.set(serverURL, forKey: "nexor_server_url")
             APIClient.shared.updateBaseURL(serverURL)
         }
     }
     @Published var userName: String = ""
 
     init() {
-        self.serverURL = UserDefaults.standard.string(forKey: "lifeos_server_url")
+        self.serverURL = UserDefaults.standard.string(forKey: "nexor_server_url")
             ?? "http://localhost:8000/api/v1"
 
-        if let token = KeychainHelper.load(key: "lifeos_auth_token") {
+        if let token = KeychainHelper.load(key: "nexor_auth_token") {
             APIClient.shared.setAuthToken(token)
             isAuthenticated = true
         }
 
-        if let url = UserDefaults.standard.string(forKey: "lifeos_server_url") {
+        if let url = UserDefaults.standard.string(forKey: "nexor_server_url") {
             APIClient.shared.updateBaseURL(url)
         }
     }
@@ -90,13 +90,13 @@ class AppState: ObservableObject {
     func signIn(email: String, password: String) async throws {
         // TODO: Real auth endpoint
         let token = "demo-token"
-        KeychainHelper.save(key: "lifeos_auth_token", value: token)
+        KeychainHelper.save(key: "nexor_auth_token", value: token)
         APIClient.shared.setAuthToken(token)
         isAuthenticated = true
     }
 
     func signOut() {
-        KeychainHelper.delete(key: "lifeos_auth_token")
+        KeychainHelper.delete(key: "nexor_auth_token")
         APIClient.shared.setAuthToken("")
         isAuthenticated = false
     }

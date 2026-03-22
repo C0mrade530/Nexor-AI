@@ -29,7 +29,7 @@ async def list_trigger_types():
 
 @router.post("/register")
 async def register_webhook(req: WebhookRegisterRequest):
-    """Register a webhook URL to receive LifeOS events.
+    """Register a webhook URL to receive Nexor events.
 
     Works with Zapier, Make (Integromat), n8n, or any webhook receiver.
     """

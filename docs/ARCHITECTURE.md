@@ -1,8 +1,8 @@
-# LifeOS — System Architecture
+# Nexor — System Architecture
 
 ## Overview
 
-LifeOS is an AI wearable memory assistant that records daily audio, transcribes and
+Nexor is an AI wearable memory assistant that records daily audio, transcribes and
 segments it into semantic events, and generates actionable intelligence (summaries,
 ideas, tasks, coaching).
 

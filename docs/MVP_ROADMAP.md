@@ -1,4 +1,4 @@
-# LifeOS — MVP Roadmap
+# Nexor — MVP Roadmap
 
 ## Phase 0: Software-First MVP
 
@@ -64,7 +64,7 @@
 
 ---
 
-## Phase 3: Full LifeOS
+## Phase 3: Full Nexor
 
 - Deep memory graph
 - Personal analytics over weeks/months

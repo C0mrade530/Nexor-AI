@@ -181,7 +181,7 @@ class AudioRecorderService: NSObject, ObservableObject {
     // MARK: - Private — File Management
 
     private func chunkFileURL(index: Int) -> URL {
-        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("lifeos_audio")
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("nexor_audio")
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         return dir.appendingPathComponent("chunk_\(String(format: "%04d", index)).wav")
     }
@@ -194,13 +194,13 @@ class AudioRecorderService: NSObject, ObservableObject {
     // MARK: - Private — Offline Queue
 
     private func savePendingUpload(sessionId: String, filePath: String) {
-        var pending = UserDefaults.standard.stringArray(forKey: "lifeos_pending_uploads") ?? []
+        var pending = UserDefaults.standard.stringArray(forKey: "nexor_pending_uploads") ?? []
         pending.append("\(sessionId)|\(filePath)")
-        UserDefaults.standard.set(pending, forKey: "lifeos_pending_uploads")
+        UserDefaults.standard.set(pending, forKey: "nexor_pending_uploads")
     }
 
     func syncPendingUploads() async {
-        guard let pending = UserDefaults.standard.stringArray(forKey: "lifeos_pending_uploads"),
+        guard let pending = UserDefaults.standard.stringArray(forKey: "nexor_pending_uploads"),
               !pending.isEmpty else { return }
 
         var remaining: [String] = []
@@ -225,13 +225,13 @@ class AudioRecorderService: NSObject, ObservableObject {
                 remaining.append(entry)
             }
         }
-        UserDefaults.standard.set(remaining, forKey: "lifeos_pending_uploads")
+        UserDefaults.standard.set(remaining, forKey: "nexor_pending_uploads")
     }
 
     // MARK: - Private — Markers
 
     private func loadMarkers() -> [ImportantMarker] {
-        guard let data = UserDefaults.standard.data(forKey: "lifeos_markers"),
+        guard let data = UserDefaults.standard.data(forKey: "nexor_markers"),
               let markers = try? JSONDecoder().decode([ImportantMarker].self, from: data) else {
             return []
         }
@@ -240,7 +240,7 @@ class AudioRecorderService: NSObject, ObservableObject {
 
     private func saveMarkers(_ markers: [ImportantMarker]) {
         if let data = try? JSONEncoder().encode(markers) {
-            UserDefaults.standard.set(data, forKey: "lifeos_markers")
+            UserDefaults.standard.set(data, forKey: "nexor_markers")
         }
     }
 }

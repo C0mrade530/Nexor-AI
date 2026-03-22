@@ -1,4 +1,4 @@
-"""Push notifications service — APNs integration for LifeOS.
+"""Push notifications service — APNs integration for Nexor.
 
 Sends reminders for:
 - Daily summary generation ("Your day is ready for review")

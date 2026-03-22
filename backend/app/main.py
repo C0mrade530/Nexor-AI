@@ -1,4 +1,4 @@
-"""LifeOS Backend — FastAPI application."""
+"""Nexor Backend — FastAPI application."""
 
 import logging
 from contextlib import asynccontextmanager
@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Startup/shutdown lifecycle."""
-    logger.info("LifeOS starting up...")
+    logger.info("Nexor starting up...")
     try:
         await init_db()
         logger.info("Database initialized")
@@ -26,11 +26,11 @@ async def lifespan(app: FastAPI):
         logger.info("Running in in-memory mode — no persistence")
     yield
     await close_db()
-    logger.info("LifeOS shut down")
+    logger.info("Nexor shut down")
 
 
 app = FastAPI(
-    title="LifeOS API",
+    title="Nexor API",
     description="AI wearable memory assistant — backend API",
     version=settings.app_version,
     docs_url="/docs",
@@ -67,7 +67,7 @@ async def health():
 @app.get("/")
 async def root():
     return {
-        "name": "LifeOS API",
+        "name": "Nexor API",
         "version": settings.app_version,
         "docs": "/docs",
     }

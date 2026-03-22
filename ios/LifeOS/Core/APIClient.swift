@@ -1,6 +1,6 @@
 import Foundation
 
-/// LifeOS API client for communicating with the backend.
+/// Nexor API client for communicating with the backend.
 class APIClient {
     static let shared = APIClient()
 

@@ -5,7 +5,7 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>en</string>
 	<key>CFBundleDisplayName</key>
-	<string>LifeOS</string>
+	<string>Nexor</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -55,19 +55,19 @@
 
 	<!-- Permissions -->
 	<key>NSMicrophoneUsageDescription</key>
-	<string>LifeOS needs access to the microphone to record audio throughout your day, capturing meetings, ideas, and thoughts for AI processing.</string>
+	<string>Nexor needs access to the microphone to record audio throughout your day, capturing meetings, ideas, and thoughts for AI processing.</string>
 	<key>NSSpeechRecognitionUsageDescription</key>
-	<string>LifeOS uses speech recognition to transcribe your recordings into text for event extraction and daily summaries.</string>
+	<string>Nexor uses speech recognition to transcribe your recordings into text for event extraction and daily summaries.</string>
 	<key>NSCalendarsUsageDescription</key>
-	<string>LifeOS can create calendar events from meetings and appointments detected in your conversations.</string>
+	<string>Nexor can create calendar events from meetings and appointments detected in your conversations.</string>
 	<key>NSContactsUsageDescription</key>
-	<string>LifeOS can match participants mentioned in conversations to your contacts.</string>
+	<string>Nexor can match participants mentioned in conversations to your contacts.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>LifeOS can tag recordings with location to provide better context for your events.</string>
+	<string>Nexor can tag recordings with location to provide better context for your events.</string>
 	<key>NSHealthShareUsageDescription</key>
-	<string>LifeOS reads your health data (sleep, steps, workouts, heart rate) to provide personalized energy and wellness recommendations.</string>
+	<string>Nexor reads your health data (sleep, steps, workouts, heart rate) to provide personalized energy and wellness recommendations.</string>
 	<key>NSHealthUpdateUsageDescription</key>
-	<string>LifeOS can write mindful minutes from your recording sessions.</string>
+	<string>Nexor can write mindful minutes from your recording sessions.</string>
 
 	<!-- Background Modes -->
 	<key>UIBackgroundModes</key>

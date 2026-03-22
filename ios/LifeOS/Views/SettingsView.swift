@@ -263,7 +263,7 @@ struct SettingsView: View {
                     // Version
                     HStack {
                         Spacer()
-                        Text("LifeOS 0.1.0 (1)")
+                        Text("Nexor 0.1.0 (1)")
                             .font(.loMicro)
                             .foregroundColor(Color.loTertiaryFallback.opacity(0.5))
                         Spacer()

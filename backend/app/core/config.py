@@ -5,13 +5,13 @@ from pydantic_settings import BaseSettings
 
 class Settings(BaseSettings):
     # App
-    app_name: str = "LifeOS"
+    app_name: str = "Nexor"
     app_version: str = "0.1.0"
     debug: bool = False
     api_prefix: str = "/api/v1"
 
     # Database
-    database_url: str = "postgresql+asyncpg://lifeos:lifeos@localhost:5432/lifeos"
+    database_url: str = "postgresql+asyncpg://nexor:nexor@localhost:5432/nexor"
 
     # Redis
     redis_url: str = "redis://localhost:6379/0"
@@ -59,7 +59,7 @@ class Settings(BaseSettings):
     # Vector DB
     chroma_persist_dir: str = "./chroma_data"
 
-    model_config = {"env_file": ".env", "env_prefix": "LIFEOS_"}
+    model_config = {"env_file": ".env", "env_prefix": "NEXOR_"}
 
     def get_anthropic_key(self) -> str:
         """Return Anthropic API key, falling back to CometAPI key."""

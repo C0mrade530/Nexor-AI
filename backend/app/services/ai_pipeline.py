@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 SEGMENTATION_PROMPT = """\
-You are an AI assistant for LifeOS, a personal memory system. You analyze transcripts
+You are an AI assistant for Nexor, a personal memory system. You analyze transcripts
 of a user's day and segment them into meaningful events.
 
 Given a transcript with timestamps, identify and segment it into distinct events.
@@ -149,7 +149,7 @@ Be CONCISE — every word must earn its place. Write in the user's language.
 """
 
 MEETING_ANALYSIS_PROMPT = """\
-You are an AI meeting analyst for LifeOS. Analyze this meeting transcript deeply.
+You are an AI meeting analyst for Nexor. Analyze this meeting transcript deeply.
 
 Extract a JSON response:
 1. summary — what was discussed
@@ -171,7 +171,7 @@ Be specific and reference actual quotes from the transcript.
 """
 
 COACHING_PROMPT = """\
-You are a personal effectiveness coach for LifeOS. Based on the day's events, provide evening coaching.
+You are a personal effectiveness coach for Nexor. Based on the day's events, provide evening coaching.
 
 Analyze and return JSON:
 1. energy_map — [{time_period, energy_level(1-10), activity, suggestion}]
@@ -191,7 +191,7 @@ Write in the user's language.
 
 
 WELLNESS_PROMPT = """\
-You are a personal energy & wellness coach for LifeOS. Given the user's health data \
+You are a personal energy & wellness coach for Nexor. Given the user's health data \
 (sleep, activity, heart metrics, workouts) and their daily events, provide a JSON response:
 
 1. energy_assessment — current energy level (1-10) with reasoning based on health data
@@ -310,7 +310,7 @@ class AIPipeline:
         """Answer user query against their personal memory."""
         docs_text = "\n\n---\n\n".join(context_docs)
         system = (
-            "You are LifeOS memory assistant. Answer the user's question based on their "
+            "You are Nexor memory assistant. Answer the user's question based on their "
             "personal events, meetings, ideas, and conversations. Be specific, cite sources. "
             "If you don't have enough information, say so."
         )

@@ -6,7 +6,7 @@ This module is the scaffold for async background processing.
 
 # TODO: Configure Celery with Redis broker
 # from celery import Celery
-# celery_app = Celery("lifeos", broker=settings.redis_url)
+# celery_app = Celery("nexor", broker=settings.redis_url)
 
 # @celery_app.task
 # async def process_session_task(session_id: str, user_id: str):

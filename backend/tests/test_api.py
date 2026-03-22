@@ -1,4 +1,4 @@
-"""API tests for LifeOS backend."""
+"""API tests for Nexor backend."""
 
 from datetime import datetime
 
@@ -49,7 +49,7 @@ def test_health():
 def test_root():
     response = client.get("/")
     assert response.status_code == 200
-    assert "LifeOS" in response.json()["name"]
+    assert "Nexor" in response.json()["name"]
 
 
 def test_create_session():

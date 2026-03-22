@@ -1,6 +1,6 @@
 import XCTest
 
-final class LifeOSTests: XCTestCase {
+final class NexorTests: XCTestCase {
 
     func testAPIClientInitialization() {
         let client = APIClient(baseURL: "http://localhost:8000/api/v1")
