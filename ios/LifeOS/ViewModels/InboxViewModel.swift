@@ -33,20 +33,28 @@ class InboxViewModel: ObservableObject {
     }
 }
 
-/// ViewModel for Daily Summary screen.
+/// ViewModel for Daily Summary screen (enhanced with mentor feedback).
 @MainActor
 class DailySummaryViewModel: ObservableObject {
     @Published var summary: DailySummary?
     @Published var recentSummaries: [DailySummary] = []
+    @Published var mentorFeedback: MentorFeedback?
     @Published var isLoading = false
+    @Published var isGenerating = false
 
     private let api = APIClient.shared
 
+    var todayDateString: String {
+        let fmt = DateFormatter()
+        fmt.dateFormat = "yyyy-MM-dd"
+        return fmt.string(from: Date())
+    }
+
     func loadToday() async {
         isLoading = true
-        let today = ISO8601DateFormatter().string(from: Date()).prefix(10)
         do {
-            summary = try await api.getDailySummary(date: String(today))
+            summary = try await api.getDailySummary(date: todayDateString)
+            mentorFeedback = summary?.mentorFeedback
         } catch {
             // No summary yet for today
         }
@@ -58,6 +66,26 @@ class DailySummaryViewModel: ObservableObject {
             recentSummaries = try await api.getDailySummaries(limit: 7)
         } catch {
             // Handle error
+        }
+    }
+
+    func generateSummary() async {
+        isGenerating = true
+        do {
+            summary = try await api.generateDailySummary(date: todayDateString)
+            mentorFeedback = summary?.mentorFeedback
+        } catch {
+            // Handle error
+        }
+        isGenerating = false
+    }
+
+    func loadMentor(date: String? = nil) async {
+        let d = date ?? todayDateString
+        do {
+            mentorFeedback = try await api.getMentorFeedback(date: d)
+        } catch {
+            // No mentor feedback yet
         }
     }
 }
@@ -81,5 +109,25 @@ class SearchViewModel: ObservableObject {
             answer = "Search failed: \(error.localizedDescription)"
         }
         isSearching = false
+    }
+}
+
+/// ViewModel for Meeting Detail with AI analysis.
+@MainActor
+class MeetingDetailViewModel: ObservableObject {
+    @Published var analysis: MeetingAnalysisData?
+    @Published var isLoading = false
+
+    private let api = APIClient.shared
+
+    func loadAnalysis(eventId: String) async {
+        isLoading = true
+        do {
+            let result = try await api.getMeetingAnalysis(eventId: eventId)
+            analysis = result.analysis
+        } catch {
+            // Handle error
+        }
+        isLoading = false
     }
 }

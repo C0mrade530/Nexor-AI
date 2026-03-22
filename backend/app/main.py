@@ -6,7 +6,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api.v1 import audio, events, process, search
+from app.api.v1 import audio, calendar, events, process, search
 from app.core.config import settings
 from app.core.database import close_db, init_db
 
@@ -51,6 +51,7 @@ app.include_router(audio.router, prefix=settings.api_prefix)
 app.include_router(events.router, prefix=settings.api_prefix)
 app.include_router(search.router, prefix=settings.api_prefix)
 app.include_router(process.router, prefix=settings.api_prefix)
+app.include_router(calendar.router, prefix=settings.api_prefix)
 
 
 @app.get("/health")

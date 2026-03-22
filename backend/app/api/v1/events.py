@@ -1,6 +1,4 @@
-"""Event endpoints — access extracted events, ideas, meetings, tasks."""
-
-from datetime import datetime
+"""Event endpoints — access extracted events, ideas, meetings, tasks, commitments."""
 
 from fastapi import APIRouter, HTTPException, Query
 
@@ -80,7 +78,7 @@ async def list_meetings(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
 ):
-    """List all meetings."""
+    """List all meetings with full details for drill-down."""
     meetings = [
         e for e in store.events.values()
         if e.get("event_type") in ("meeting", "sales_call")
@@ -91,6 +89,57 @@ async def list_meetings(
 
     return {
         "events": meetings[start : start + page_size],
+        "total": total,
+        "page": page,
+        "page_size": page_size,
+    }
+
+
+@router.get("/meetings/{event_id}/analysis")
+async def get_meeting_analysis(event_id: str):
+    """Get deep AI analysis of a specific meeting."""
+    if event_id not in store.events:
+        raise HTTPException(status_code=404, detail="Event not found")
+
+    event = store.events[event_id]
+    if event.get("event_type") not in ("meeting", "sales_call"):
+        raise HTTPException(status_code=400, detail="Event is not a meeting")
+
+    from app.services.processing import processing_service
+    analysis = await processing_service.analyze_meeting_event(
+        transcript=event.get("transcript_excerpt", event.get("summary", "")),
+        meeting_context={
+            "title": event.get("title"),
+            "participants": event.get("participants", []),
+            "event_type": event.get("event_type"),
+        },
+    )
+    return {"event_id": event_id, "analysis": analysis}
+
+
+@router.get("/commitments")
+async def list_commitments(
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+):
+    """List all promises and commitments across events."""
+    items = []
+    for event in store.events.values():
+        for c in event.get("commitments", []):
+            items.append({
+                "event_id": event["id"],
+                "event_title": event.get("title", ""),
+                "event_date": event.get("started_at"),
+                "promise": c.get("promise", c.get("commitment", "")),
+                "to_whom": c.get("to_whom", c.get("to", "")),
+                "deadline": c.get("deadline"),
+                "context": c.get("context", ""),
+            })
+    items.sort(key=lambda x: x.get("event_date", ""), reverse=True)
+    total = len(items)
+    start = (page - 1) * page_size
+    return {
+        "commitments": items[start : start + page_size],
         "total": total,
         "page": page,
         "page_size": page_size,
@@ -110,9 +159,28 @@ async def list_action_items():
                     "task": item.get("task", ""),
                     "assignee": item.get("assignee"),
                     "deadline": item.get("deadline"),
+                    "priority": item.get("priority"),
                     "event_date": event.get("started_at"),
                 })
     return {"action_items": items, "total": len(items)}
+
+
+@router.get("/follow-ups")
+async def list_follow_ups():
+    """List all follow-ups needed across events."""
+    items = []
+    for event in store.events.values():
+        for f in event.get("follow_ups", []):
+            items.append({
+                "event_id": event["id"],
+                "event_title": event.get("title", ""),
+                "action": f.get("action", ""),
+                "whom": f.get("whom", ""),
+                "by_when": f.get("by_when"),
+                "priority": f.get("priority"),
+                "event_date": event.get("started_at"),
+            })
+    return {"follow_ups": items, "total": len(items)}
 
 
 @router.get("/summaries/daily")

@@ -18,11 +18,15 @@ def clear_store():
     store.chunks.clear()
     store.events.clear()
     store.daily_summaries.clear()
+    store.mentor_feedback.clear()
+    store.calendar_tokens.clear()
     yield
     store.sessions.clear()
     store.chunks.clear()
     store.events.clear()
     store.daily_summaries.clear()
+    store.mentor_feedback.clear()
+    store.calendar_tokens.clear()
 
 
 def test_health():
@@ -175,3 +179,61 @@ def test_daily_summaries_empty():
 def test_search_requires_query():
     response = client.get("/api/v1/search")
     assert response.status_code == 422
+
+
+def test_list_commitments():
+    store.events["c1"] = {
+        "id": "c1", "event_type": "meeting", "title": "Meeting",
+        "summary": "A meeting", "started_at": "2024-01-01T10:00:00",
+        "commitments": [{"promise": "Send report", "to_whom": "Alice", "deadline": "Friday"}],
+    }
+    response = client.get("/api/v1/events/commitments")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["total"] == 1
+    assert data["commitments"][0]["promise"] == "Send report"
+
+
+def test_list_follow_ups():
+    store.events["f1"] = {
+        "id": "f1", "event_type": "meeting", "title": "Call",
+        "summary": "A call", "started_at": "2024-01-01T10:00:00",
+        "follow_ups": [{"action": "Check status", "whom": "Bob", "by_when": "Monday"}],
+    }
+    response = client.get("/api/v1/events/follow-ups")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["total"] == 1
+    assert data["follow_ups"][0]["action"] == "Check status"
+
+
+def test_calendar_status():
+    response = client.get("/api/v1/calendar/status")
+    assert response.status_code == 200
+    assert response.json()["connected"] is False
+
+
+def test_calendar_connect():
+    response = client.post(
+        "/api/v1/calendar/connect",
+        json={"access_token": "test-token", "user_id": "demo-user"},
+    )
+    assert response.status_code == 200
+    assert response.json()["status"] == "connected"
+
+    status = client.get("/api/v1/calendar/status")
+    assert status.json()["connected"] is True
+
+
+def test_calendar_disconnect():
+    store.calendar_tokens["demo-user"] = {"access_token": "test"}
+    response = client.delete("/api/v1/calendar/disconnect")
+    assert response.status_code == 200
+
+    status = client.get("/api/v1/calendar/status")
+    assert status.json()["connected"] is False
+
+
+def test_mentor_not_found():
+    response = client.get("/api/v1/process/mentor/2024-01-01")
+    assert response.status_code == 404

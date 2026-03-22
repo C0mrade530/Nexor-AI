@@ -15,3 +15,9 @@ events: dict[str, dict] = {}
 
 # Daily summaries: {date_string: dict}
 daily_summaries: dict[str, dict] = {}
+
+# Mentor feedback: {date_string: dict}
+mentor_feedback: dict[str, dict] = {}
+
+# Google Calendar tokens: {user_id: {access_token, refresh_token, ...}}
+calendar_tokens: dict[str, dict] = {}

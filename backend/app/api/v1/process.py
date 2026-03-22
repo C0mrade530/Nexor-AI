@@ -16,7 +16,7 @@ router = APIRouter(prefix="/process", tags=["processing"])
 async def process_session(session_id: str):
     """Trigger AI processing on a finished session.
 
-    Runs: transcription -> event segmentation -> memory indexing.
+    Runs: transcription -> event segmentation -> memory indexing -> calendar sync.
     """
     session_dir = os.path.join(settings.storage_path, session_id)
     if not os.path.exists(session_dir):
@@ -53,18 +53,18 @@ async def process_session(session_id: str):
         "chunks_processed": result["chunks_processed"],
         "events_extracted": len(result["events"]),
         "events": result["events"],
+        "calendar_sync": result.get("calendar_sync"),
     }
 
 
 @router.post("/daily-summary")
 async def generate_daily_summary(date: str | None = None):
-    """Generate daily summary for a given date (default: today)."""
+    """Generate end-of-day summary with mentor feedback, meetings, commitments, tasks."""
     if date is None:
         date = datetime.utcnow().strftime("%Y-%m-%d")
 
     user_id = "demo-user"
 
-    # Check if events exist for this date
     date_events = [
         e for e in store.events.values()
         if e.get("started_at", "").startswith(date)
@@ -79,3 +79,32 @@ async def generate_daily_summary(date: str | None = None):
 
     summary = await processing_service.generate_daily_summary(user_id, date)
     return summary
+
+
+@router.get("/mentor/{date}")
+async def get_mentor_feedback(date: str):
+    """Get AI mentor feedback for a specific date."""
+    feedback = store.mentor_feedback.get(date)
+    if not feedback:
+        raise HTTPException(
+            status_code=404,
+            detail="No mentor feedback for this date. Generate daily summary first."
+        )
+    return feedback
+
+
+@router.post("/mentor/{date}")
+async def generate_mentor_feedback(date: str):
+    """Generate or regenerate AI mentor feedback for a date."""
+    date_events = [
+        e for e in store.events.values()
+        if e.get("started_at", "").startswith(date)
+    ]
+
+    if not date_events:
+        raise HTTPException(status_code=404, detail="No events found for this date")
+
+    from app.services.ai_pipeline import ai_pipeline
+    mentor = await ai_pipeline.generate_mentor_feedback(date_events, date)
+    store.mentor_feedback[date] = mentor
+    return mentor

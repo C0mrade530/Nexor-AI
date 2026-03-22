@@ -3,6 +3,11 @@ import SwiftUI
 struct EventDetailView: View {
     let event: Event
     @Environment(\.dismiss) var dismiss
+    @StateObject private var meetingVM = MeetingDetailViewModel()
+
+    var isMeeting: Bool {
+        event.eventType == "meeting" || event.eventType == "sales_call"
+    }
 
     var body: some View {
         ZStack {
@@ -38,6 +43,11 @@ struct EventDetailView: View {
                         .font(.loBody)
                         .foregroundColor(Color.loPrimaryFallback)
                         .lineSpacing(4)
+
+                    // AI Analysis for meetings
+                    if isMeeting {
+                        meetingAnalysisSection
+                    }
 
                     // Participants
                     if let participants = event.participants, !participants.isEmpty {
@@ -82,6 +92,9 @@ struct EventDetailView: View {
                                                         .font(.loMicro)
                                                         .foregroundColor(Color.loAccentFallback)
                                                 }
+                                                if let priority = item.priority {
+                                                    LOChip(text: priority, isActive: true)
+                                                }
                                             }
                                         }
                                     }
@@ -105,11 +118,18 @@ struct EventDetailView: View {
                                             Text(idea.text)
                                                 .font(.loBody)
                                                 .foregroundColor(Color.loPrimaryFallback)
-                                            if let category = idea.category {
-                                                Text(category.uppercased())
-                                                    .font(.loMicro)
-                                                    .tracking(0.5)
-                                                    .foregroundColor(Color.loTertiaryFallback)
+                                            HStack(spacing: Spacing.xs) {
+                                                if let category = idea.category {
+                                                    Text(category.uppercased())
+                                                        .font(.loMicro)
+                                                        .tracking(0.5)
+                                                        .foregroundColor(Color.loTertiaryFallback)
+                                                }
+                                                if let next = idea.suggestedNextStep {
+                                                    Text("Next: \(next)")
+                                                        .font(.loMicro)
+                                                        .foregroundColor(Color.loAccentFallback)
+                                                }
                                             }
                                         }
                                     }
@@ -127,7 +147,7 @@ struct EventDetailView: View {
                                         Image(systemName: "arrow.branch")
                                             .font(.system(size: 12, weight: .light))
                                             .foregroundColor(Color.loSecondaryFallback)
-                                        Text(d["decision"] ?? d.values.first ?? "")
+                                        Text(d["decision"] ?? d.firstValue ?? "")
                                             .font(.loBody)
                                             .foregroundColor(Color.loPrimaryFallback)
                                     }
@@ -141,10 +161,26 @@ struct EventDetailView: View {
                         detailSection("Commitments") {
                             VStack(alignment: .leading, spacing: Spacing.xs) {
                                 ForEach(Array(commitments.enumerated()), id: \.offset) { _, c in
-                                    Text(c["promise"] ?? c.values.first ?? "")
-                                        .font(.loBody)
-                                        .foregroundColor(Color.loPrimaryFallback)
-                                        .padding(.leading, Spacing.md)
+                                    HStack(alignment: .top, spacing: Spacing.sm) {
+                                        Image(systemName: "hand.raised")
+                                            .font(.system(size: 12, weight: .light))
+                                            .foregroundColor(Color.loAccentFallback)
+                                        VStack(alignment: .leading, spacing: 2) {
+                                            Text(c["promise"] ?? c.firstValue ?? "")
+                                                .font(.loBody)
+                                                .foregroundColor(Color.loPrimaryFallback)
+                                            if let whom = c["to_whom"], !whom.isEmpty {
+                                                Text("To: \(whom)")
+                                                    .font(.loMicro)
+                                                    .foregroundColor(Color.loSecondaryFallback)
+                                            }
+                                            if let deadline = c["deadline"], !deadline.isEmpty {
+                                                Text(deadline)
+                                                    .font(.loMicro)
+                                                    .foregroundColor(Color.loAccentFallback)
+                                            }
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -159,9 +195,23 @@ struct EventDetailView: View {
                                         Image(systemName: "arrow.turn.up.right")
                                             .font(.system(size: 12, weight: .light))
                                             .foregroundColor(Color.loAccentFallback)
-                                        Text(f["action"] ?? f.values.first ?? "")
-                                            .font(.loBody)
-                                            .foregroundColor(Color.loPrimaryFallback)
+                                        VStack(alignment: .leading, spacing: 2) {
+                                            Text(f["action"] ?? f.firstValue ?? "")
+                                                .font(.loBody)
+                                                .foregroundColor(Color.loPrimaryFallback)
+                                            HStack(spacing: Spacing.xs) {
+                                                if let whom = f["whom"], !whom.isEmpty {
+                                                    Text(whom)
+                                                        .font(.loMicro)
+                                                        .foregroundColor(Color.loSecondaryFallback)
+                                                }
+                                                if let when = f["by_when"], !when.isEmpty {
+                                                    Text(when)
+                                                        .font(.loMicro)
+                                                        .foregroundColor(Color.loAccentFallback)
+                                                }
+                                            }
+                                        }
                                     }
                                 }
                             }
@@ -180,9 +230,8 @@ struct EventDetailView: View {
                                         .font(.loCaption)
                                         .foregroundColor(Color.loSecondaryFallback)
                                 }
-
                                 LOButton(title: "Add to Calendar", style: .secondary) {
-                                    // TODO: EventKit
+                                    // TODO: EventKit integration
                                 }
                             }
                         }
@@ -237,6 +286,128 @@ struct EventDetailView: View {
             }
         }
         .navigationBarTitleDisplayMode(.inline)
+        .task {
+            if isMeeting {
+                await meetingVM.loadAnalysis(eventId: event.id)
+            }
+        }
+    }
+
+    // MARK: - Meeting Analysis
+
+    @ViewBuilder
+    private var meetingAnalysisSection: some View {
+        if meetingVM.isLoading {
+            HStack {
+                ProgressView()
+                    .tint(Color.loTertiaryFallback)
+                Text("Analyzing meeting...")
+                    .font(.loCaption)
+                    .foregroundColor(Color.loTertiaryFallback)
+            }
+            .padding(Spacing.md)
+            .loCardStyle()
+        } else if let analysis = meetingVM.analysis {
+            VStack(alignment: .leading, spacing: Spacing.lg) {
+                // Meeting rating
+                if let rating = analysis.meetingRating {
+                    HStack {
+                        Text("MEETING SCORE")
+                            .font(.loMicro)
+                            .tracking(1)
+                            .foregroundColor(Color.loTertiaryFallback)
+                        Spacer()
+                        HStack(spacing: 2) {
+                            ForEach(0..<10, id: \.self) { i in
+                                RoundedRectangle(cornerRadius: 1)
+                                    .fill(i < rating ? Color.loAccentFallback : Color.loTertiaryFallback.opacity(0.15))
+                                    .frame(width: 14, height: 3)
+                            }
+                        }
+                        Text("\(rating)")
+                            .font(.loMonoSmall)
+                            .foregroundColor(Color.loPrimaryFallback)
+                    }
+                }
+
+                // Relationship temperature
+                if let temp = analysis.relationshipTemperature {
+                    HStack(spacing: Spacing.xs) {
+                        Text("RELATIONSHIP")
+                            .font(.loMicro)
+                            .tracking(1)
+                            .foregroundColor(Color.loTertiaryFallback)
+                        LOChip(text: temp, isActive: true)
+                    }
+                }
+
+                // Follow-up draft
+                if let draft = analysis.followUpDraft {
+                    detailSection("Suggested Follow-up") {
+                        Text(draft)
+                            .font(.loCaption)
+                            .foregroundColor(Color.loSecondaryFallback)
+                            .lineSpacing(3)
+                            .padding(Spacing.sm)
+                            .loCardStyle()
+                    }
+                }
+
+                // Deal probability
+                if let prob = analysis.dealProbability {
+                    HStack(spacing: Spacing.xs) {
+                        Text("DEAL PROBABILITY")
+                            .font(.loMicro)
+                            .tracking(1)
+                            .foregroundColor(Color.loTertiaryFallback)
+                        Text(prob)
+                            .font(.loCaption)
+                            .foregroundColor(Color.loAccentFallback)
+                    }
+                }
+
+                // Hidden opportunities
+                if let hidden = analysis.hiddenOpportunities, !hidden.isEmpty {
+                    detailSection("Hidden Opportunities") {
+                        VStack(alignment: .leading, spacing: Spacing.xs) {
+                            ForEach(hidden, id: \.self) { opp in
+                                HStack(alignment: .top, spacing: Spacing.sm) {
+                                    Image(systemName: "eye")
+                                        .font(.system(size: 10, weight: .light))
+                                        .foregroundColor(Color.loAccentFallback)
+                                        .padding(.top, 3)
+                                    Text(opp)
+                                        .font(.loCaption)
+                                        .foregroundColor(Color.loPrimaryFallback)
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Improvement suggestions
+                if let suggestions = analysis.improvementSuggestions, !suggestions.isEmpty {
+                    detailSection("Next Meeting Improvements") {
+                        VStack(alignment: .leading, spacing: Spacing.xs) {
+                            ForEach(suggestions, id: \.self) { s in
+                                HStack(alignment: .top, spacing: Spacing.sm) {
+                                    Image(systemName: "arrow.up.circle")
+                                        .font(.system(size: 10, weight: .light))
+                                        .foregroundColor(Color.loSecondaryFallback)
+                                        .padding(.top, 3)
+                                    Text(s)
+                                        .font(.loCaption)
+                                        .foregroundColor(Color.loPrimaryFallback)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            .padding(Spacing.md)
+            .background(Color.loSurfaceFallback.opacity(0.5))
+            .cornerRadius(12)
+        }
     }
 
     // MARK: - Helpers

@@ -61,9 +61,9 @@ struct Event: Codable, Identifiable {
     let participants: [String]?
     let actionItems: [ActionItem]?
     let ideas: [Idea]?
-    let decisions: [[String: String]]?
-    let commitments: [[String: String]]?
-    let followUps: [[String: String]]?
+    let decisions: [FlexibleDict]?
+    let commitments: [FlexibleDict]?
+    let followUps: [FlexibleDict]?
     let emotionalTone: String?
     let urgency: Int?
     let importance: Int?
@@ -93,27 +93,82 @@ struct Event: Codable, Identifiable {
     }
 }
 
+/// Flexible dictionary that handles both string and non-string JSON values.
+struct FlexibleDict: Codable {
+    let values: [String: String]
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.singleValueContainer()
+        if let dict = try? container.decode([String: String].self) {
+            values = dict
+        } else if let anyDict = try? container.decode([String: AnyCodableValue].self) {
+            values = anyDict.mapValues { $0.stringValue }
+        } else {
+            values = [:]
+        }
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.singleValueContainer()
+        try container.encode(values)
+    }
+
+    subscript(key: String) -> String? { values[key] }
+
+    var firstValue: String? { values.values.first }
+}
+
+/// Helper for decoding mixed-type JSON values as strings.
+struct AnyCodableValue: Codable {
+    let stringValue: String
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.singleValueContainer()
+        if let s = try? container.decode(String.self) {
+            stringValue = s
+        } else if let i = try? container.decode(Int.self) {
+            stringValue = "\(i)"
+        } else if let d = try? container.decode(Double.self) {
+            stringValue = "\(d)"
+        } else if let b = try? container.decode(Bool.self) {
+            stringValue = b ? "true" : "false"
+        } else {
+            stringValue = ""
+        }
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.singleValueContainer()
+        try container.encode(stringValue)
+    }
+}
+
 struct ActionItem: Codable {
     let task: String
     let assignee: String?
     let deadline: String?
+    let priority: String?
 }
 
 struct Idea: Codable {
     let text: String
     let category: String?
     let valueScore: Int?
+    let potentialValue: String?
+    let suggestedNextStep: String?
 
     enum CodingKeys: String, CodingKey {
         case text, category
         case valueScore = "value_score"
+        case potentialValue = "potential_value"
+        case suggestedNextStep = "suggested_next_step"
     }
 }
 
 struct CalendarSuggestion: Codable {
     let title: String
     let datetimeStr: String?
-    let participants: [String]
+    let participants: [String]?
     let notes: String?
     let reminderMinutes: Int?
 
@@ -147,35 +202,103 @@ struct ActionItemsResponse: Codable {
     }
 }
 
-struct ActionItemEntry: Codable {
+struct ActionItemEntry: Codable, Identifiable {
+    var id: String { "\(eventId)-\(task)" }
     let eventId: String
     let eventTitle: String
     let task: String
     let assignee: String?
     let deadline: String?
+    let priority: String?
     let eventDate: String?
 
     enum CodingKeys: String, CodingKey {
         case eventId = "event_id"
         case eventTitle = "event_title"
-        case task, assignee, deadline
+        case task, assignee, deadline, priority
         case eventDate = "event_date"
     }
 }
 
-// MARK: - Daily Summary
+// MARK: - Commitments
+
+struct CommitmentsResponse: Codable {
+    let commitments: [CommitmentEntry]
+    let total: Int
+    let page: Int
+    let pageSize: Int
+
+    enum CodingKeys: String, CodingKey {
+        case commitments, total, page
+        case pageSize = "page_size"
+    }
+}
+
+struct CommitmentEntry: Codable, Identifiable {
+    var id: String { "\(eventId)-\(promise)" }
+    let eventId: String
+    let eventTitle: String
+    let eventDate: String?
+    let promise: String
+    let toWhom: String?
+    let deadline: String?
+    let context: String?
+
+    enum CodingKeys: String, CodingKey {
+        case eventId = "event_id"
+        case eventTitle = "event_title"
+        case eventDate = "event_date"
+        case promise
+        case toWhom = "to_whom"
+        case deadline, context
+    }
+}
+
+// MARK: - Follow-ups
+
+struct FollowUpsResponse: Codable {
+    let followUps: [FollowUpEntry]
+    let total: Int
+
+    enum CodingKeys: String, CodingKey {
+        case followUps = "follow_ups"
+        case total
+    }
+}
+
+struct FollowUpEntry: Codable, Identifiable {
+    var id: String { "\(eventId)-\(action)" }
+    let eventId: String
+    let eventTitle: String
+    let action: String
+    let whom: String?
+    let byWhen: String?
+    let priority: String?
+    let eventDate: String?
+
+    enum CodingKeys: String, CodingKey {
+        case eventId = "event_id"
+        case eventTitle = "event_title"
+        case action, whom
+        case byWhen = "by_when"
+        case priority
+        case eventDate = "event_date"
+    }
+}
+
+// MARK: - Daily Summary (enhanced)
 
 struct DailySummary: Codable, Identifiable {
     let id: String
-    let date: Date
-    let headline: String
-    let summary: String
-    let keyEvents: [[String: String]]?
-    let keyIdeas: [[String: String]]?
-    let keyDecisions: [[String: String]]?
-    let newTasks: [[String: String]]?
-    let commitmentsMade: [[String: String]]?
-    let followUpsNeeded: [[String: String]]?
+    let date: String
+    let headline: String?
+    let summary: String?
+    let keyEvents: [FlexibleDict]?
+    let keyIdeas: [FlexibleDict]?
+    let keyDecisions: [FlexibleDict]?
+    let newTasks: [FlexibleDict]?
+    let commitmentsMade: [FlexibleDict]?
+    let followUpsNeeded: [FlexibleDict]?
     let emotionalStateSummary: String?
     let coachingFeedback: String?
     let oneThingForTomorrow: String?
@@ -183,8 +306,19 @@ struct DailySummary: Codable, Identifiable {
     let totalEvents: Int?
     let totalMeetings: Int?
     let totalIdeas: Int?
+    let totalCommitments: Int?
+    let totalTasks: Int?
     let totalRecordingMinutes: Double?
-    let createdAt: Date
+    // Structured sections from enhanced AI
+    let meetingsSection: MeetingsSection?
+    let commitmentsSection: CommitmentsSection?
+    let tasksSection: TasksSection?
+    let ideasSection: IdeasSection?
+    let decisionsMade: [FlexibleDict]?
+    // Mentor feedback
+    let mentorFeedback: MentorFeedback?
+    let coachingDetails: CoachingDetails?
+    let createdAt: String?
 
     enum CodingKeys: String, CodingKey {
         case id, date, headline, summary
@@ -201,8 +335,345 @@ struct DailySummary: Codable, Identifiable {
         case totalEvents = "total_events"
         case totalMeetings = "total_meetings"
         case totalIdeas = "total_ideas"
+        case totalCommitments = "total_commitments"
+        case totalTasks = "total_tasks"
         case totalRecordingMinutes = "total_recording_minutes"
+        case meetingsSection = "meetings_section"
+        case commitmentsSection = "commitments_section"
+        case tasksSection = "tasks_section"
+        case ideasSection = "ideas_section"
+        case decisionsMade = "decisions_made"
+        case mentorFeedback = "mentor_feedback"
+        case coachingDetails = "coaching_details"
         case createdAt = "created_at"
+    }
+}
+
+// MARK: - Structured Summary Sections
+
+struct MeetingsSection: Codable {
+    let total: Int?
+    let meetings: [MeetingSummaryItem]?
+}
+
+struct MeetingSummaryItem: Codable, Identifiable {
+    var id: String { title ?? UUID().uuidString }
+    let title: String?
+    let participants: [String]?
+    let keyTakeaways: [String]?
+    let actionItems: [String]?
+    let followUpNeeded: String?
+    let outcomeQuality: Int?
+    let suggestedFollowUpMessage: String?
+
+    enum CodingKeys: String, CodingKey {
+        case title, participants
+        case keyTakeaways = "key_takeaways"
+        case actionItems = "action_items"
+        case followUpNeeded = "follow_up_needed"
+        case outcomeQuality = "outcome_quality"
+        case suggestedFollowUpMessage = "suggested_follow_up_message"
+    }
+}
+
+struct CommitmentsSection: Codable {
+    let total: Int?
+    let items: [CommitmentSummaryItem]?
+}
+
+struct CommitmentSummaryItem: Codable, Identifiable {
+    var id: String { promise ?? UUID().uuidString }
+    let promise: String?
+    let toWhom: String?
+    let deadline: String?
+    let priority: String?
+    let riskOfForgetting: Int?
+    let reminderSuggestion: String?
+
+    enum CodingKeys: String, CodingKey {
+        case promise
+        case toWhom = "to_whom"
+        case deadline, priority
+        case riskOfForgetting = "risk_of_forgetting"
+        case reminderSuggestion = "reminder_suggestion"
+    }
+}
+
+struct TasksSection: Codable {
+    let total: Int?
+    let newTasks: [TaskSummaryItem]?
+    let suggestedOrder: [String]?
+
+    enum CodingKeys: String, CodingKey {
+        case total
+        case newTasks = "new_tasks"
+        case suggestedOrder = "suggested_order"
+    }
+}
+
+struct TaskSummaryItem: Codable, Identifiable {
+    var id: String { task ?? UUID().uuidString }
+    let task: String?
+    let sourceEvent: String?
+    let assignee: String?
+    let deadline: String?
+    let priority: String?
+
+    enum CodingKeys: String, CodingKey {
+        case task
+        case sourceEvent = "source_event"
+        case assignee, deadline, priority
+    }
+}
+
+struct IdeasSection: Codable {
+    let total: Int?
+    let ideas: [IdeaSummaryItem]?
+}
+
+struct IdeaSummaryItem: Codable, Identifiable {
+    var id: String { text ?? UUID().uuidString }
+    let text: String?
+    let category: String?
+    let potentialValue: String?
+    let suggestedNextStep: String?
+
+    enum CodingKeys: String, CodingKey {
+        case text, category
+        case potentialValue = "potential_value"
+        case suggestedNextStep = "suggested_next_step"
+    }
+}
+
+// MARK: - Mentor Feedback
+
+struct MentorFeedback: Codable {
+    let overallAssessment: String?
+    let whatYouDidWell: [MentorObservation]?
+    let whatToImprove: [MentorImprovement]?
+    let communicationFeedback: [CommunicationAdvice]?
+    let salesOpportunities: [SalesOpportunity]?
+    let upsellStrategies: [UpsellStrategy]?
+    let innovationSparks: [InnovationIdea]?
+    let futureVision: FutureVision?
+    let tomorrowScript: TomorrowScript?
+    let mentorQuote: String?
+
+    enum CodingKeys: String, CodingKey {
+        case overallAssessment = "overall_assessment"
+        case whatYouDidWell = "what_you_did_well"
+        case whatToImprove = "what_to_improve"
+        case communicationFeedback = "communication_feedback"
+        case salesOpportunities = "sales_opportunities"
+        case upsellStrategies = "upsell_strategies"
+        case innovationSparks = "innovation_sparks"
+        case futureVision = "future_vision"
+        case tomorrowScript = "tomorrow_script"
+        case mentorQuote = "mentor_quote"
+    }
+}
+
+struct MentorObservation: Codable, Identifiable {
+    var id: String { observation ?? UUID().uuidString }
+    let observation: String?
+    let principleApplied: String?
+    let fromWhichMentor: String?
+
+    enum CodingKeys: String, CodingKey {
+        case observation
+        case principleApplied = "principle_applied"
+        case fromWhichMentor = "from_which_mentor"
+    }
+}
+
+struct MentorImprovement: Codable, Identifiable {
+    var id: String { observation ?? UUID().uuidString }
+    let observation: String?
+    let specificAdvice: String?
+    let relevantPrinciple: String?
+    let fromWhichMentor: String?
+
+    enum CodingKeys: String, CodingKey {
+        case observation
+        case specificAdvice = "specific_advice"
+        case relevantPrinciple = "relevant_principle"
+        case fromWhichMentor = "from_which_mentor"
+    }
+}
+
+struct CommunicationAdvice: Codable, Identifiable {
+    var id: String { situation ?? UUID().uuidString }
+    let situation: String?
+    let whatWasSaid: String?
+    let whatToSayInstead: String?
+    let why: String?
+    let principle: String?
+
+    enum CodingKeys: String, CodingKey {
+        case situation
+        case whatWasSaid = "what_was_said"
+        case whatToSayInstead = "what_to_say_instead"
+        case why, principle
+    }
+}
+
+struct SalesOpportunity: Codable, Identifiable {
+    var id: String { opportunity ?? UUID().uuidString }
+    let opportunity: String?
+    let approach: String?
+    let techniqueToUse: String?
+    let expectedOutcome: String?
+
+    enum CodingKeys: String, CodingKey {
+        case opportunity, approach
+        case techniqueToUse = "technique_to_use"
+        case expectedOutcome = "expected_outcome"
+    }
+}
+
+struct UpsellStrategy: Codable, Identifiable {
+    var id: String { clientOrContact ?? UUID().uuidString }
+    let clientOrContact: String?
+    let currentRelationship: String?
+    let upsellIdea: String?
+    let approachScript: String?
+
+    enum CodingKeys: String, CodingKey {
+        case clientOrContact = "client_or_contact"
+        case currentRelationship = "current_relationship"
+        case upsellIdea = "upsell_idea"
+        case approachScript = "approach_script"
+    }
+}
+
+struct InnovationIdea: Codable, Identifiable {
+    var id: String { idea ?? UUID().uuidString }
+    let idea: String?
+    let context: String?
+    let potentialImpact: String?
+    let firstStep: String?
+    let whyItsBrilliant: String?
+
+    enum CodingKeys: String, CodingKey {
+        case idea, context
+        case potentialImpact = "potential_impact"
+        case firstStep = "first_step"
+        case whyItsBrilliant = "why_its_brilliant"
+    }
+}
+
+struct FutureVision: Codable {
+    let threeMonthFocus: String?
+    let keyHabitsToBuild: [String]?
+    let biggestLeveragePoint: String?
+
+    enum CodingKeys: String, CodingKey {
+        case threeMonthFocus = "three_month_focus"
+        case keyHabitsToBuild = "key_habits_to_build"
+        case biggestLeveragePoint = "biggest_leverage_point"
+    }
+}
+
+struct TomorrowScript: Codable {
+    let morningPriority: String?
+    let keyConversations: [KeyConversation]?
+    let oneBoldMove: String?
+    let eveningReflectionQuestion: String?
+
+    enum CodingKeys: String, CodingKey {
+        case morningPriority = "morning_priority"
+        case keyConversations = "key_conversations"
+        case oneBoldMove = "one_bold_move"
+        case eveningReflectionQuestion = "evening_reflection_question"
+    }
+}
+
+struct KeyConversation: Codable, Identifiable {
+    var id: String { withWhom ?? UUID().uuidString }
+    let withWhom: String?
+    let objective: String?
+    let openingLine: String?
+    let technique: String?
+
+    enum CodingKeys: String, CodingKey {
+        case withWhom = "with_whom"
+        case objective
+        case openingLine = "opening_line"
+        case technique
+    }
+}
+
+// MARK: - Coaching Details
+
+struct CoachingDetails: Codable {
+    let energyMap: [FlexibleDict]?
+    let effectivenessHighlights: String?
+    let chaosMoments: String?
+    let overPromises: String?
+    let missedFollowUps: String?
+    let communicationWins: String?
+    let communicationMisses: String?
+    let habitAdjustment: String?
+    let patternAlert: String?
+    let accountabilityScore: Int?
+
+    enum CodingKeys: String, CodingKey {
+        case energyMap = "energy_map"
+        case effectivenessHighlights = "effectiveness_highlights"
+        case chaosMoments = "chaos_moments"
+        case overPromises = "over_promises"
+        case missedFollowUps = "missed_follow_ups"
+        case communicationWins = "communication_wins"
+        case communicationMisses = "communication_misses"
+        case habitAdjustment = "habit_adjustment"
+        case patternAlert = "pattern_alert"
+        case accountabilityScore = "accountability_score"
+    }
+}
+
+// MARK: - Meeting Analysis
+
+struct MeetingAnalysis: Codable {
+    let eventId: String
+    let analysis: MeetingAnalysisData
+
+    enum CodingKeys: String, CodingKey {
+        case eventId = "event_id"
+        case analysis
+    }
+}
+
+struct MeetingAnalysisData: Codable {
+    let summary: String?
+    let keyDecisions: [FlexibleDict]?
+    let actionItems: [FlexibleDict]?
+    let painPoints: [String]?
+    let objections: [FlexibleDict]?
+    let interestSignals: String?
+    let energyDrops: String?
+    let nextSteps: [String]?
+    let followUpDraft: String?
+    let meetingRating: Int?
+    let improvementSuggestions: [String]?
+    let dealProbability: String?
+    let relationshipTemperature: String?
+    let hiddenOpportunities: [String]?
+
+    enum CodingKeys: String, CodingKey {
+        case summary
+        case keyDecisions = "key_decisions"
+        case actionItems = "action_items"
+        case painPoints = "pain_points"
+        case objections
+        case interestSignals = "interest_signals"
+        case energyDrops = "energy_drops"
+        case nextSteps = "next_steps"
+        case followUpDraft = "follow_up_draft"
+        case meetingRating = "meeting_rating"
+        case improvementSuggestions = "improvement_suggestions"
+        case dealProbability = "deal_probability"
+        case relationshipTemperature = "relationship_temperature"
+        case hiddenOpportunities = "hidden_opportunities"
     }
 }
 
@@ -224,5 +695,17 @@ struct ProcessingResult: Codable {
         case sessionId = "session_id"
         case chunksProcessed = "chunks_processed"
         case eventsExtracted = "events_extracted"
+    }
+}
+
+// MARK: - Calendar
+
+struct CalendarStatus: Codable {
+    let connected: Bool
+    let userId: String
+
+    enum CodingKeys: String, CodingKey {
+        case connected
+        case userId = "user_id"
     }
 }

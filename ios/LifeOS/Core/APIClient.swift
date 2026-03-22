@@ -126,10 +126,66 @@ class APIClient {
         return try await get("/events/summaries/daily/\(date)")
     }
 
+    // MARK: - Commitments & Follow-ups
+
+    func getCommitments() async throws -> CommitmentsResponse {
+        return try await get("/events/commitments")
+    }
+
+    func getFollowUps() async throws -> FollowUpsResponse {
+        return try await get("/events/follow-ups")
+    }
+
+    // MARK: - Meeting Analysis
+
+    func getMeetingAnalysis(eventId: String) async throws -> MeetingAnalysis {
+        return try await get("/events/meetings/\(eventId)/analysis")
+    }
+
+    // MARK: - Mentor
+
+    func getMentorFeedback(date: String) async throws -> MentorFeedback {
+        return try await get("/process/mentor/\(date)")
+    }
+
+    func generateMentorFeedback(date: String) async throws -> MentorFeedback {
+        return try await post("/process/mentor/\(date)", body: [:])
+    }
+
+    // MARK: - Calendar
+
+    func getCalendarStatus() async throws -> CalendarStatus {
+        return try await get("/calendar/status")
+    }
+
+    func connectCalendar(accessToken: String) async throws -> EmptyResponse {
+        return try await post("/calendar/connect", body: [
+            "access_token": accessToken
+        ])
+    }
+
+    func syncMeetingsToCalendar(date: String? = nil) async throws -> EmptyResponse {
+        var body: [String: Any] = [:]
+        if let date = date { body["date"] = date }
+        return try await post("/calendar/sync/meetings", body: body)
+    }
+
+    func syncTasksToCalendar(date: String? = nil) async throws -> EmptyResponse {
+        var body: [String: Any] = [:]
+        if let date = date { body["date"] = date }
+        return try await post("/calendar/sync/tasks", body: body)
+    }
+
     // MARK: - Processing
 
     func processSession(sessionId: String) async throws -> ProcessingResult {
         return try await post("/process/session/\(sessionId)", body: [:])
+    }
+
+    func generateDailySummary(date: String? = nil) async throws -> DailySummary {
+        var path = "/process/daily-summary"
+        if let date = date { path += "?date=\(date)" }
+        return try await post(path, body: [:])
     }
 
     // MARK: - Private Helpers
