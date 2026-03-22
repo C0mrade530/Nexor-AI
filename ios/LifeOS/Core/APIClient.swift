@@ -188,6 +188,64 @@ class APIClient {
         return try await post(path, body: [:])
     }
 
+    // MARK: - Health & HealthKit
+
+    func getHealthToday() async throws -> HealthTodaySnapshot {
+        return try await get("/health/today")
+    }
+
+    func getHealthTrends() async throws -> HealthWeeklyTrends {
+        return try await get("/health/trends")
+    }
+
+    func getHealthProgress() async throws -> HealthGoalProgress {
+        return try await get("/health/progress")
+    }
+
+    func setHealthGoals(_ goals: [String: Any]) async throws -> EmptyResponse {
+        return try await post("/health/goals", body: goals)
+    }
+
+    // MARK: - Finance
+
+    func getFinanceSummary(month: String? = nil) async throws -> FinanceMonthlySummary {
+        var path = "/finance/summary"
+        if let month = month { path += "?month=\(month)" }
+        return try await get(path)
+    }
+
+    func addTransactions(_ transactions: [[String: Any]]) async throws -> EmptyResponse {
+        return try await post("/finance/transactions", body: ["transactions": transactions])
+    }
+
+    func analyzeSpending(month: String? = nil) async throws -> [String: Any] {
+        var path = "/finance/analyze"
+        if let month = month { path += "?month=\(month)" }
+
+        guard let url = URL(string: "\(baseURLString)\(path)") else { throw APIError.invalidURL }
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        addAuthHeader(&request)
+
+        let (data, response) = try await session.data(for: request)
+        try validateResponse(response)
+        return try JSONSerialization.jsonObject(with: data) as? [String: Any] ?? [:]
+    }
+
+    // MARK: - Notifications
+
+    func getNotificationPrefs() async throws -> NotificationPreferences {
+        return try await get("/notifications/preferences")
+    }
+
+    func setNotificationPrefs(_ prefs: [String: Any]) async throws -> EmptyResponse {
+        return try await post("/notifications/preferences", body: prefs)
+    }
+
+    func checkReminders() async throws -> EmptyResponse {
+        return try await post("/notifications/check-reminders", body: [:])
+    }
+
     // MARK: - Plaud NotePin
 
     func getPlaudStatus() async throws -> PlaudStatus {

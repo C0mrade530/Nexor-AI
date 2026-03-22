@@ -14,12 +14,23 @@ client = TestClient(app)
 @pytest.fixture(autouse=True)
 def clear_store():
     """Clear in-memory store between tests."""
+    from app.services import health, finance, notifications, zapier
     store.sessions.clear()
     store.chunks.clear()
     store.events.clear()
     store.daily_summaries.clear()
     store.mentor_feedback.clear()
     store.calendar_tokens.clear()
+    health.health_data.clear()
+    health.health_goals.clear()
+    finance.transactions.clear()
+    finance.finance_profiles.clear()
+    notifications.device_tokens.clear()
+    notifications.notification_preferences.clear()
+    notifications.notification_history.clear()
+    notifications.scheduled_notifications.clear()
+    zapier.webhooks.clear()
+    zapier.webhook_log.clear()
     yield
     store.sessions.clear()
     store.chunks.clear()
@@ -271,3 +282,208 @@ def test_meeting_analysis_not_meeting():
     }
     response = client.get("/api/v1/events/meetings/idea1/analysis")
     assert response.status_code == 400
+
+
+# ==================== HEALTH ====================
+
+def test_health_today_empty():
+    response = client.get("/api/v1/health/today")
+    assert response.status_code == 200
+    assert response.json()["available"] is False
+
+
+def test_health_sync_and_today():
+    response = client.post("/api/v1/health/sync", json={
+        "date": "2026-03-22",
+        "sleep": {"total_hours": 7.5, "quality_score": 82},
+        "activity": {"steps": 9200, "active_minutes": 45, "active_calories": 380},
+        "heart": {"resting_hr": 60, "hrv": 48},
+        "workouts": [{"type": "running", "duration_minutes": 30, "calories": 280}],
+    })
+    assert response.status_code == 200
+    assert response.json()["status"] == "synced"
+
+    today = client.get("/api/v1/health/today")
+    data = today.json()
+    assert data["available"] is True
+    assert data["steps"] == 9200
+
+
+def test_health_goals():
+    response = client.post("/api/v1/health/goals", json={
+        "sleep_hours": 8,
+        "steps": 10000,
+        "active_minutes": 60,
+    })
+    assert response.status_code == 200
+
+    goals = client.get("/api/v1/health/goals")
+    assert goals.json()["sleep_hours"] == 8
+
+
+def test_health_trends_empty():
+    response = client.get("/api/v1/health/trends")
+    assert response.status_code == 200
+    assert response.json()["available"] is False
+
+
+def test_health_progress_no_data():
+    response = client.get("/api/v1/health/progress")
+    assert response.status_code == 200
+    assert response.json()["available"] is False
+
+
+# ==================== FINANCE ====================
+
+def test_finance_add_transactions():
+    response = client.post("/api/v1/finance/transactions", json={
+        "transactions": [
+            {"date": "2026-03-22", "description": "Яндекс.Еда", "amount": -1250, "category": "food_delivery"},
+            {"date": "2026-03-22", "description": "Зарплата", "amount": 350000, "category": "salary"},
+        ]
+    })
+    assert response.status_code == 200
+    assert response.json()["added"] == 2
+
+
+def test_finance_get_transactions():
+    from app.services.finance import transactions
+    transactions["demo-user"] = [
+        {"id": "t1", "date": "2026-03-22", "description": "Test", "amount": -500, "category": "food", "account": ""},
+    ]
+    response = client.get("/api/v1/finance/transactions")
+    assert response.status_code == 200
+    assert response.json()["total"] == 1
+
+
+def test_finance_summary():
+    from app.services.finance import transactions
+    transactions["demo-user"] = [
+        {"id": "t1", "date": "2026-03-22", "description": "Salary", "amount": 100000, "category": "salary", "account": ""},
+        {"id": "t2", "date": "2026-03-22", "description": "Food", "amount": -5000, "category": "food", "account": ""},
+        {"id": "t3", "date": "2026-03-22", "description": "Taxi", "amount": -1000, "category": "transport", "account": ""},
+    ]
+    response = client.get("/api/v1/finance/summary?month=2026-03")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["income"] == 100000
+    assert data["expenses"] == 6000
+
+
+def test_finance_profile():
+    response = client.post("/api/v1/finance/profile", json={
+        "monthly_income": 350000,
+        "currency": "RUB",
+        "debts": [{"name": "Кредитка", "balance": 120000, "rate": 29.9}],
+    })
+    assert response.status_code == 200
+
+    profile = client.get("/api/v1/finance/profile")
+    assert profile.json()["monthly_income"] == 350000
+
+
+# ==================== NOTIFICATIONS ====================
+
+def test_notification_register_device():
+    response = client.post("/api/v1/notifications/register", json={
+        "device_token": "abc123",
+        "platform": "ios",
+    })
+    assert response.status_code == 200
+    assert response.json()["registered"] is True
+
+
+def test_notification_preferences():
+    response = client.post("/api/v1/notifications/preferences", json={
+        "daily_summary_reminder": True,
+        "daily_summary_time": "21:00",
+        "commitment_reminders": True,
+    })
+    assert response.status_code == 200
+
+    prefs = client.get("/api/v1/notifications/preferences")
+    assert prefs.json()["daily_summary_reminder"] is True
+
+
+def test_notification_send():
+    from app.services.notifications import device_tokens
+    device_tokens["demo-user"] = ["token123"]
+
+    response = client.post("/api/v1/notifications/send", json={
+        "title": "Test",
+        "body": "Hello",
+        "category": "test",
+    })
+    assert response.status_code == 200
+    assert response.json()["delivered"] is True
+
+
+def test_notification_history():
+    response = client.get("/api/v1/notifications/history")
+    assert response.status_code == 200
+
+
+def test_notification_check_reminders():
+    response = client.post("/api/v1/notifications/check-reminders")
+    assert response.status_code == 200
+
+
+# ==================== WEBHOOKS (ZAPIER) ====================
+
+def test_webhook_list_triggers():
+    response = client.get("/api/v1/webhooks/triggers")
+    assert response.status_code == 200
+    triggers = response.json()["triggers"]
+    assert "recording_processed" in triggers
+    assert "daily_summary_generated" in triggers
+
+
+def test_webhook_register():
+    response = client.post("/api/v1/webhooks/register", json={
+        "webhook_url": "https://hooks.zapier.com/test/123",
+        "triggers": ["recording_processed", "new_task"],
+        "name": "My Zapier Zap",
+    })
+    assert response.status_code == 200
+    assert response.json()["name"] == "My Zapier Zap"
+    assert response.json()["active"] is True
+
+
+def test_webhook_list():
+    from app.services.zapier import webhooks
+    webhooks["demo-user"] = [{
+        "id": "wh1", "user_id": "demo-user", "name": "Test",
+        "url": "https://example.com", "triggers": ["new_task"],
+        "active": True, "deliveries": 0, "last_delivery": None,
+    }]
+    response = client.get("/api/v1/webhooks/list")
+    assert response.status_code == 200
+    assert response.json()["total"] == 1
+
+
+def test_webhook_delete():
+    from app.services.zapier import webhooks
+    webhooks["demo-user"] = [{"id": "wh1", "user_id": "demo-user"}]
+    response = client.delete("/api/v1/webhooks/wh1")
+    assert response.status_code == 200
+
+
+def test_webhook_toggle():
+    from app.services.zapier import webhooks
+    webhooks["demo-user"] = [{
+        "id": "wh1", "user_id": "demo-user", "name": "Test",
+        "url": "https://example.com", "triggers": ["new_task"],
+        "active": True,
+    }]
+    response = client.post("/api/v1/webhooks/toggle", json={
+        "webhook_id": "wh1",
+        "active": False,
+    })
+    assert response.status_code == 200
+    assert response.json()["active"] is False
+
+
+def test_webhook_delivery_log():
+    response = client.get("/api/v1/webhooks/log")
+    assert response.status_code == 200
+    assert response.json()["total"] == 0

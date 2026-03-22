@@ -768,3 +768,130 @@ struct PlaudSyncOneResult: Codable {
         case sizeBytes = "size_bytes"
     }
 }
+
+// MARK: - Health & Wellness
+
+struct HealthTodaySnapshot: Codable {
+    let available: Bool
+    let date: String?
+    let sleepHours: Double?
+    let sleepQuality: Int?
+    let steps: Int?
+    let activeMinutes: Int?
+    let activeCalories: Int?
+    let restingHr: Int?
+    let hrv: Int?
+    let workoutsCount: Int?
+    let energyScore: Int?
+
+    enum CodingKeys: String, CodingKey {
+        case available, date, steps, hrv
+        case sleepHours = "sleep_hours"
+        case sleepQuality = "sleep_quality"
+        case activeMinutes = "active_minutes"
+        case activeCalories = "active_calories"
+        case restingHr = "resting_hr"
+        case workoutsCount = "workouts_count"
+        case energyScore = "energy_score"
+    }
+}
+
+struct HealthGoalProgress: Codable {
+    let available: Bool
+    let sleep: GoalItem?
+    let steps: GoalItem?
+    let activeMinutes: GoalItem?
+    let overallPercent: Int?
+
+    enum CodingKeys: String, CodingKey {
+        case available, sleep, steps
+        case activeMinutes = "active_minutes"
+        case overallPercent = "overall_percent"
+    }
+}
+
+struct GoalItem: Codable {
+    let current: Double?
+    let goal: Double?
+    let percent: Int?
+}
+
+struct HealthWeeklyTrends: Codable {
+    let available: Bool
+    let daysTracked: Int?
+    let avgSleepHours: Double?
+    let avgSteps: Int?
+    let avgActiveMinutes: Int?
+    let avgHrv: Int?
+    let workoutDays: Int?
+    let sleepTrend: String?
+    let stepsTrend: String?
+    let hrvTrend: String?
+
+    enum CodingKeys: String, CodingKey {
+        case available
+        case daysTracked = "days_tracked"
+        case avgSleepHours = "avg_sleep_hours"
+        case avgSteps = "avg_steps"
+        case avgActiveMinutes = "avg_active_minutes"
+        case avgHrv = "avg_hrv"
+        case workoutDays = "workout_days"
+        case sleepTrend = "sleep_trend"
+        case stepsTrend = "steps_trend"
+        case hrvTrend = "hrv_trend"
+    }
+}
+
+// MARK: - Finance
+
+struct FinanceMonthlySummary: Codable {
+    let month: String?
+    let income: Double?
+    let expenses: Double?
+    let net: Double?
+    let savingsRate: Double?
+    let byCategory: [CategorySpend]?
+    let transactionCount: Int?
+
+    enum CodingKeys: String, CodingKey {
+        case month, income, expenses, net
+        case savingsRate = "savings_rate"
+        case byCategory = "by_category"
+        case transactionCount = "transaction_count"
+    }
+}
+
+struct CategorySpend: Codable, Identifiable {
+    var id: String { category }
+    let category: String
+    let amount: Double
+}
+
+struct FinanceTransaction: Codable, Identifiable {
+    let id: String
+    let date: String?
+    let description: String?
+    let amount: Double?
+    let category: String?
+    let account: String?
+}
+
+// MARK: - Notifications
+
+struct NotificationPreferences: Codable {
+    let dailySummaryReminder: Bool?
+    let dailySummaryTime: String?
+    let commitmentReminders: Bool?
+    let followUpReminders: Bool?
+    let healthNudges: Bool?
+    let financeAlerts: Bool?
+
+    enum CodingKeys: String, CodingKey {
+        case dailySummaryReminder = "daily_summary_reminder"
+        case dailySummaryTime = "daily_summary_time"
+        case commitmentReminders = "commitment_reminders"
+        case followUpReminders = "follow_up_reminders"
+        case healthNudges = "health_nudges"
+        case financeAlerts = "finance_alerts"
+    }
+}

@@ -64,6 +64,10 @@
 	<string>LifeOS can match participants mentioned in conversations to your contacts.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>LifeOS can tag recordings with location to provide better context for your events.</string>
+	<key>NSHealthShareUsageDescription</key>
+	<string>LifeOS reads your health data (sleep, steps, workouts, heart rate) to provide personalized energy and wellness recommendations.</string>
+	<key>NSHealthUpdateUsageDescription</key>
+	<string>LifeOS can write mindful minutes from your recording sessions.</string>
 
 	<!-- Background Modes -->
 	<key>UIBackgroundModes</key>
@@ -71,6 +75,7 @@
 		<string>audio</string>
 		<string>fetch</string>
 		<string>processing</string>
+		<string>remote-notification</string>
 	</array>
 
 	<!-- App Transport Security — allow local dev server -->

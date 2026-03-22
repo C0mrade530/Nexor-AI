@@ -190,6 +190,30 @@ Write in the user's language.
 """
 
 
+WELLNESS_PROMPT = """\
+You are a personal energy & wellness coach for LifeOS. Given the user's health data \
+(sleep, activity, heart metrics, workouts) and their daily events, provide a JSON response:
+
+1. energy_assessment — current energy level (1-10) with reasoning based on health data
+2. sleep_feedback — {quality, recommendation, impact_on_today}
+3. activity_feedback — {assessment, recommendation, compared_to_goal}
+4. workout_feedback — [{workout_type, performance_note, recovery_recommendation}]
+5. stress_indicators — based on HRV and resting HR trends, is stress high/low?
+6. energy_optimization — [{time_of_day, suggestion, expected_impact}]
+   - When to do deep work based on energy patterns
+   - When to take breaks
+   - Optimal meeting times
+7. nutrition_hints — based on activity level and goals
+8. tomorrow_plan — {
+     ideal_bedtime, ideal_wake_time,
+     recommended_workout: {type, duration, intensity},
+     energy_peaks: [predicted high-energy time slots]
+   }
+
+Be specific and reference actual numbers. Write in the user's language.
+"""
+
+
 class AIPipeline:
     """Orchestrates all AI processing via CometAPI (Anthropic Messages API compatible)."""
 
@@ -269,6 +293,17 @@ class AIPipeline:
         events_text = json.dumps(events, ensure_ascii=False, indent=2)
         user_content = f"Today's events:\n{events_text}"
         text = await self._call_claude(COACHING_PROMPT, user_content, max_tokens=4096)
+        return self._parse_json_response(text)
+
+    async def generate_wellness_coaching(
+        self, health_data: dict, events: list[dict]
+    ) -> dict:
+        """Generate wellness coaching based on health metrics and daily events."""
+        context = json.dumps(
+            {"health": health_data, "events_count": len(events)},
+            ensure_ascii=False, indent=2,
+        )
+        text = await self._call_claude(WELLNESS_PROMPT, context, max_tokens=4096)
         return self._parse_json_response(text)
 
     async def semantic_search(self, query: str, context_docs: list[str]) -> str:

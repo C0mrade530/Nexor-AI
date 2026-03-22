@@ -9,6 +9,7 @@ from app.services.ai_pipeline import ai_pipeline
 from app.services.calendar_sync import calendar_service
 from app.services.memory import memory_service
 from app.services.transcription import transcription_service
+from app.services.zapier import zapier_service
 
 logger = logging.getLogger(__name__)
 
@@ -101,6 +102,37 @@ class ProcessingService:
 
         logger.info(f"Session {session_id}: {len(events_out)} events extracted")
 
+        # Step 5: Fire Zapier webhooks for extracted events
+        try:
+            await zapier_service.fire_trigger(
+                user_id=user_id,
+                trigger_type="recording_processed",
+                payload={
+                    "session_id": session_id,
+                    "events_count": len(events_out),
+                    "events": [
+                        {"id": e.get("id"), "type": e.get("event_type"), "title": e.get("title")}
+                        for e in events_out
+                    ],
+                },
+            )
+            for event in events_out:
+                etype = event.get("event_type", "")
+                trigger_map = {
+                    "commitment": "new_commitment",
+                    "task": "new_task",
+                    "follow_up": "new_follow_up",
+                    "idea": "new_idea",
+                }
+                if etype in trigger_map:
+                    await zapier_service.fire_trigger(
+                        user_id=user_id,
+                        trigger_type=trigger_map[etype],
+                        payload=event,
+                    )
+        except Exception as e:
+            logger.error(f"Webhook triggers failed: {e}")
+
         result = {
             "transcript": full_transcript,
             "events": events_out,
@@ -159,6 +191,21 @@ class ProcessingService:
         )
 
         store.daily_summaries[date] = summary
+
+        # Fire webhook for daily summary
+        try:
+            await zapier_service.fire_trigger(
+                user_id=user_id,
+                trigger_type="daily_summary_generated",
+                payload={
+                    "date": date,
+                    "headline": summary.get("headline", ""),
+                    "total_events": summary.get("total_events", 0),
+                    "effectiveness_score": summary.get("effectiveness_score"),
+                },
+            )
+        except Exception as e:
+            logger.error(f"Daily summary webhook failed: {e}")
 
         # Auto-sync tasks to Google if token available
         token_data = store.calendar_tokens.get(user_id)

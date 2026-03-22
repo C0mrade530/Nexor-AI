@@ -1,7 +1,9 @@
 import SwiftUI
+import UserNotifications
 
 @main
 struct LifeOSApp: App {
+    @UIApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
     @StateObject private var appState = AppState()
 
     var body: some Scene {
@@ -19,7 +21,43 @@ struct LifeOSApp: App {
             }
             .animation(.easeInOut(duration: 0.5), value: appState.isAuthenticated)
             .preferredColorScheme(nil)  // follow system
+            .task {
+                // Request notification permission on first launch
+                _ = await NotificationService.shared.requestPermission()
+                // Schedule daily summary reminder
+                NotificationService.shared.scheduleDailySummaryReminder()
+            }
         }
+    }
+}
+
+/// App delegate for handling push notification registration.
+class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDelegate {
+    func application(
+        _ application: UIApplication,
+        didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
+    ) -> Bool {
+        UNUserNotificationCenter.current().delegate = self
+        return true
+    }
+
+    func application(_ application: UIApplication, didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {
+        Task { @MainActor in
+            NotificationService.shared.registerToken(deviceToken)
+        }
+    }
+
+    func application(_ application: UIApplication, didFailToRegisterForRemoteNotificationsWithError error: Error) {
+        print("Push registration failed: \(error)")
+    }
+
+    // Handle notifications when app is in foreground
+    func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        willPresent notification: UNNotification,
+        withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
+    ) {
+        completionHandler([.banner, .badge, .sound])
     }
 }
 
