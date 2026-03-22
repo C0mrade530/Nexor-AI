@@ -876,6 +876,45 @@ struct FinanceTransaction: Codable, Identifiable {
     let account: String?
 }
 
+// MARK: - Telegram
+
+struct TelegramStatus: Codable {
+    let configured: Bool
+    let linked: Bool
+    let chatId: Int?
+    let enabled: Bool
+    let reminders: Bool
+    let dailySummary: Bool
+
+    enum CodingKeys: String, CodingKey {
+        case configured, linked, enabled, reminders
+        case chatId = "chat_id"
+        case dailySummary = "daily_summary"
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        configured = (try? container.decode(Bool.self, forKey: .configured)) ?? false
+        linked = (try? container.decode(Bool.self, forKey: .linked)) ?? false
+        chatId = try? container.decode(Int.self, forKey: .chatId)
+        enabled = (try? container.decode(Bool.self, forKey: .enabled)) ?? false
+        reminders = (try? container.decode(Bool.self, forKey: .reminders)) ?? true
+        dailySummary = (try? container.decode(Bool.self, forKey: .dailySummary)) ?? true
+    }
+}
+
+struct TelegramLinkResponse: Codable {
+    let linked: Bool
+    let userId: String?
+    let chatId: Int?
+
+    enum CodingKeys: String, CodingKey {
+        case linked
+        case userId = "user_id"
+        case chatId = "chat_id"
+    }
+}
+
 // MARK: - Notifications
 
 struct NotificationPreferences: Codable {

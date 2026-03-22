@@ -278,6 +278,30 @@ class APIClient {
         ] as [String: Any])
     }
 
+    // MARK: - Telegram
+
+    func getTelegramStatus() async throws -> TelegramStatus {
+        return try await get("/telegram/status")
+    }
+
+    func linkTelegram(chatId: Int) async throws -> TelegramLinkResponse {
+        return try await post("/telegram/link", body: [
+            "chat_id": chatId,
+            "user_id": "demo-user"
+        ] as [String: Any])
+    }
+
+    func unlinkTelegram() async throws -> EmptyResponse {
+        return try await delete("/telegram/unlink")
+    }
+
+    func updateTelegramSettings(reminders: Bool? = nil, dailySummary: Bool? = nil) async throws -> EmptyResponse {
+        var body: [String: Any] = [:]
+        if let r = reminders { body["reminders"] = r }
+        if let d = dailySummary { body["daily_summary"] = d }
+        return try await post("/telegram/settings", body: body)
+    }
+
     // MARK: - Private Helpers
 
     private func get<T: Decodable>(_ path: String) async throws -> T {

@@ -20,6 +20,13 @@ struct SettingsView: View {
     // Google Calendar
     @State private var calendarConnected = false
 
+    // Telegram
+    @State private var telegramLinked = false
+    @State private var telegramChatId: String = ""
+    @State private var showTelegramLink = false
+    @State private var telegramReminders = true
+    @State private var telegramDailySummary = true
+
     var body: some View {
         ZStack {
             Color.loBackgroundFallback.ignoresSafeArea()
@@ -208,6 +215,47 @@ struct SettingsView: View {
                     .loCardStyle()
                     .padding(.horizontal, Spacing.lg)
 
+                    // MARK: - Telegram Bot
+
+                    LOSectionHeader(title: "Telegram")
+
+                    VStack(spacing: 0) {
+                        settingsRow {
+                            HStack {
+                                Image(systemName: "paperplane")
+                                    .font(.system(size: 18, weight: .light))
+                                    .foregroundColor(telegramLinked ? Color.loAccentFallback : Color.loTertiaryFallback)
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text("Telegram Bot")
+                                        .font(.loBody)
+                                        .foregroundColor(Color.loPrimaryFallback)
+                                    Text(telegramLinked ? "Linked" : "Not linked")
+                                        .font(.loMicro)
+                                        .foregroundColor(telegramLinked ? Color.loAccentFallback : Color.loTertiaryFallback)
+                                }
+                                Spacer()
+                                if !telegramLinked {
+                                    LOButton(title: "Link", style: .secondary) {
+                                        showTelegramLink = true
+                                    }
+                                }
+                            }
+                        }
+
+                        if telegramLinked {
+                            LODivider().padding(.leading, Spacing.md)
+                            settingsToggle("Reminders", isOn: $telegramReminders)
+                            LODivider().padding(.leading, Spacing.md)
+                            settingsToggle("Daily summary", isOn: $telegramDailySummary)
+                            LODivider().padding(.leading, Spacing.md)
+                            settingsAction("Unlink Telegram", icon: "xmark.circle", isDestructive: true) {
+                                Task { await unlinkTelegram() }
+                            }
+                        }
+                    }
+                    .loCardStyle()
+                    .padding(.horizontal, Spacing.lg)
+
                     // MARK: - Server
 
                     LOSectionHeader(title: "Connection")
@@ -274,9 +322,15 @@ struct SettingsView: View {
             }
         }
         .navigationBarHidden(true)
-        .task { await checkIntegrations() }
+        .task {
+            await checkIntegrations()
+            await checkTelegram()
+        }
         .sheet(isPresented: $showPlaudConnect) {
             PlaudConnectSheet(isPresented: $showPlaudConnect, plaudConnected: $plaudConnected)
+        }
+        .sheet(isPresented: $showTelegramLink) {
+            TelegramLinkSheet(isPresented: $showTelegramLink, telegramLinked: $telegramLinked)
         }
         .alert("Delete all data?", isPresented: $showDeleteAlert) {
             Button("Cancel", role: .cancel) {}
@@ -350,6 +404,25 @@ struct SettingsView: View {
         do {
             _ = try await APIClient.shared.disconnectPlaud()
             plaudConnected = false
+        } catch {}
+    }
+
+    // MARK: - Telegram Actions
+
+    private func checkTelegram() async {
+        do {
+            let status = try await APIClient.shared.getTelegramStatus()
+            telegramLinked = status.linked
+            if let chatId = status.chatId { telegramChatId = "\(chatId)" }
+            telegramReminders = status.reminders
+            telegramDailySummary = status.dailySummary
+        } catch {}
+    }
+
+    private func unlinkTelegram() async {
+        do {
+            _ = try await APIClient.shared.unlinkTelegram()
+            telegramLinked = false
         } catch {}
     }
 }
@@ -464,5 +537,131 @@ struct PlaudConnectSheet: View {
             errorMessage = "Connection failed: \(error.localizedDescription)"
         }
         isConnecting = false
+    }
+}
+
+// MARK: - Telegram Link Sheet
+
+struct TelegramLinkSheet: View {
+    @Binding var isPresented: Bool
+    @Binding var telegramLinked: Bool
+    @State private var chatId = ""
+    @State private var isLinking = false
+    @State private var errorMessage: String?
+
+    var body: some View {
+        NavigationView {
+            ZStack {
+                Color.loBackgroundFallback.ignoresSafeArea()
+
+                ScrollView {
+                    VStack(alignment: .leading, spacing: Spacing.lg) {
+                        Text("Link Telegram")
+                            .font(.loTitle)
+                            .foregroundColor(Color.loPrimaryFallback)
+
+                        VStack(alignment: .leading, spacing: Spacing.sm) {
+                            Text("HOW TO LINK")
+                                .font(.loMicro)
+                                .tracking(1)
+                                .foregroundColor(Color.loTertiaryFallback)
+
+                            stepRow(1, "Open Telegram and find @NexorAIBot")
+                            stepRow(2, "Send /start to the bot")
+                            stepRow(3, "The bot will reply with your Chat ID")
+                            stepRow(4, "Paste the Chat ID below")
+                        }
+
+                        VStack(alignment: .leading, spacing: Spacing.xs) {
+                            Text("CHAT ID")
+                                .font(.loMicro)
+                                .tracking(1)
+                                .foregroundColor(Color.loTertiaryFallback)
+
+                            TextField("e.g. 123456789", text: $chatId)
+                                .font(.loMonoSmall)
+                                .textFieldStyle(.plain)
+                                .keyboardType(.numberPad)
+                                .padding(Spacing.sm)
+                                .background(Color.loSurfaceFallback)
+                                .cornerRadius(8)
+                                .foregroundColor(Color.loPrimaryFallback)
+                        }
+
+                        VStack(alignment: .leading, spacing: Spacing.sm) {
+                            Text("WHAT YOU GET")
+                                .font(.loMicro)
+                                .tracking(1)
+                                .foregroundColor(Color.loTertiaryFallback)
+
+                            featureRow("bell", "Reminders about commitments and follow-ups")
+                            featureRow("text.bubble", "Daily summary delivered to chat")
+                            featureRow("mic", "Send voice messages for transcription")
+                            featureRow("pencil", "Quick text notes saved as events")
+                        }
+
+                        if let error = errorMessage {
+                            Text(error)
+                                .font(.loCaption)
+                                .foregroundColor(.red)
+                        }
+
+                        LOButton(title: isLinking ? "Linking..." : "Link Telegram", style: .primary) {
+                            Task { await link() }
+                        }
+                        .disabled(chatId.isEmpty || isLinking)
+                    }
+                    .padding(Spacing.lg)
+                }
+            }
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { isPresented = false }
+                        .foregroundColor(Color.loTertiaryFallback)
+                }
+            }
+        }
+    }
+
+    private func stepRow(_ number: Int, _ text: String) -> some View {
+        HStack(alignment: .top, spacing: Spacing.sm) {
+            Text("\(number)")
+                .font(.loMonoSmall)
+                .foregroundColor(Color.loAccentFallback)
+                .frame(width: 20)
+            Text(text)
+                .font(.loCaption)
+                .foregroundColor(Color.loPrimaryFallback)
+        }
+    }
+
+    private func featureRow(_ icon: String, _ text: String) -> some View {
+        HStack(spacing: Spacing.sm) {
+            Image(systemName: icon)
+                .font(.system(size: 14, weight: .light))
+                .foregroundColor(Color.loAccentFallback)
+                .frame(width: 20)
+            Text(text)
+                .font(.loCaption)
+                .foregroundColor(Color.loPrimaryFallback)
+        }
+    }
+
+    private func link() async {
+        guard let id = Int(chatId) else {
+            errorMessage = "Chat ID must be a number"
+            return
+        }
+        isLinking = true
+        errorMessage = nil
+        do {
+            _ = try await APIClient.shared.linkTelegram(chatId: id)
+            telegramLinked = true
+            isPresented = false
+        } catch {
+            errorMessage = "Failed to link: \(error.localizedDescription)"
+        }
+        isLinking = false
     }
 }

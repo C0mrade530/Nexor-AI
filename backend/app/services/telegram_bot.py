@@ -141,7 +141,8 @@ class TelegramBotService:
             "💡 /ideas — recent ideas\n"
             "🤝 /commitments — your promises\n"
             "❓ /help — all commands\n\n"
-            f"Linked to user: `{user_id}`"
+            f"Your Chat ID: `{chat_id}`\n"
+            "📱 _Copy this ID and paste it in Nexor app → Settings → Telegram → Link_"
         )
         return {"status": "started", "user_id": user_id}
 
