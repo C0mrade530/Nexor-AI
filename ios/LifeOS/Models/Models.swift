@@ -709,3 +709,62 @@ struct CalendarStatus: Codable {
         case userId = "user_id"
     }
 }
+
+// MARK: - Plaud NotePin
+
+struct PlaudStatus: Codable {
+    let connected: Bool
+    let region: String?
+}
+
+struct PlaudRecording: Codable, Identifiable {
+    let id: String
+    let filename: String?
+    let durationSeconds: Double?
+    let filesize: Int?
+    let createdAt: String?
+    let hasTranscription: Bool?
+    let hasSummary: Bool?
+    let synced: Bool?
+
+    enum CodingKeys: String, CodingKey {
+        case id, filename, filesize, synced
+        case durationSeconds = "duration_seconds"
+        case createdAt = "created_at"
+        case hasTranscription = "has_transcription"
+        case hasSummary = "has_summary"
+    }
+}
+
+struct PlaudRecordingsResponse: Codable {
+    let recordings: [PlaudRecording]
+    let total: Int
+}
+
+struct PlaudSyncResult: Codable {
+    let totalAvailable: Int?
+    let alreadySynced: Int?
+    let newlySynced: Int?
+    let failed: Int?
+
+    enum CodingKeys: String, CodingKey {
+        case totalAvailable = "total_available"
+        case alreadySynced = "already_synced"
+        case newlySynced = "newly_synced"
+        case failed
+    }
+}
+
+struct PlaudSyncOneResult: Codable {
+    let sessionId: String?
+    let plaudFileId: String?
+    let filename: String?
+    let sizeBytes: Int?
+
+    enum CodingKeys: String, CodingKey {
+        case sessionId = "session_id"
+        case plaudFileId = "plaud_file_id"
+        case filename
+        case sizeBytes = "size_bytes"
+    }
+}

@@ -9,6 +9,17 @@ struct SettingsView: View {
     @State private var language = "ru"
     @State private var showDeleteAlert = false
 
+    // Plaud NotePin
+    @State private var plaudConnected = false
+    @State private var showPlaudConnect = false
+    @State private var plaudToken = ""
+    @State private var plaudRegion = "us"
+    @State private var isSyncingPlaud = false
+    @State private var plaudSyncResult: Int?
+
+    // Google Calendar
+    @State private var calendarConnected = false
+
     var body: some View {
         ZStack {
             Color.loBackgroundFallback.ignoresSafeArea()
@@ -95,6 +106,108 @@ struct SettingsView: View {
                     .loCardStyle()
                     .padding(.horizontal, Spacing.lg)
 
+                    // MARK: - Plaud NotePin
+
+                    LOSectionHeader(title: "Plaud NotePin")
+
+                    VStack(spacing: 0) {
+                        settingsRow {
+                            HStack {
+                                Image(systemName: "waveform.circle")
+                                    .font(.system(size: 18, weight: .light))
+                                    .foregroundColor(plaudConnected ? Color.loAccentFallback : Color.loTertiaryFallback)
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text("Plaud NotePin")
+                                        .font(.loBody)
+                                        .foregroundColor(Color.loPrimaryFallback)
+                                    Text(plaudConnected ? "Connected" : "Not connected")
+                                        .font(.loMicro)
+                                        .foregroundColor(plaudConnected ? Color.loAccentFallback : Color.loTertiaryFallback)
+                                }
+                                Spacer()
+                                if !plaudConnected {
+                                    LOButton(title: "Connect", style: .secondary) {
+                                        showPlaudConnect = true
+                                    }
+                                }
+                            }
+                        }
+
+                        if plaudConnected {
+                            LODivider().padding(.leading, Spacing.md)
+
+                            settingsAction("Sync recordings now", icon: "arrow.triangle.2.circlepath") {
+                                Task { await syncPlaud() }
+                            }
+
+                            if isSyncingPlaud {
+                                HStack {
+                                    ProgressView()
+                                        .tint(Color.loAccentFallback)
+                                    Text("Syncing...")
+                                        .font(.loCaption)
+                                        .foregroundColor(Color.loTertiaryFallback)
+                                }
+                                .padding(.horizontal, Spacing.md)
+                                .padding(.bottom, Spacing.sm)
+                            }
+
+                            if let result = plaudSyncResult {
+                                HStack(spacing: Spacing.sm) {
+                                    Text("\(result) new recordings synced")
+                                        .font(.loMicro)
+                                        .foregroundColor(Color.loAccentFallback)
+                                }
+                                .padding(.horizontal, Spacing.md)
+                                .padding(.bottom, Spacing.sm)
+                            }
+
+                            LODivider().padding(.leading, Spacing.md)
+
+                            settingsAction("Disconnect", icon: "xmark.circle", isDestructive: true) {
+                                Task { await disconnectPlaud() }
+                            }
+                        }
+                    }
+                    .loCardStyle()
+                    .padding(.horizontal, Spacing.lg)
+
+                    // MARK: - Google Calendar
+
+                    LOSectionHeader(title: "Google Calendar")
+
+                    VStack(spacing: 0) {
+                        settingsRow {
+                            HStack {
+                                Image(systemName: "calendar")
+                                    .font(.system(size: 18, weight: .light))
+                                    .foregroundColor(calendarConnected ? Color.loAccentFallback : Color.loTertiaryFallback)
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text("Google Calendar")
+                                        .font(.loBody)
+                                        .foregroundColor(Color.loPrimaryFallback)
+                                    Text(calendarConnected ? "Auto-sync enabled" : "Not connected")
+                                        .font(.loMicro)
+                                        .foregroundColor(calendarConnected ? Color.loAccentFallback : Color.loTertiaryFallback)
+                                }
+                                Spacer()
+                            }
+                        }
+
+                        LODivider().padding(.leading, Spacing.md)
+
+                        settingsRow {
+                            VStack(alignment: .leading, spacing: Spacing.xs) {
+                                Text("Auto-sync meetings and tasks to Google Calendar when daily summary is generated")
+                                    .font(.loMicro)
+                                    .foregroundColor(Color.loTertiaryFallback)
+                                    .lineSpacing(2)
+                            }
+                        }
+                    }
+                    .loCardStyle()
+                    .padding(.horizontal, Spacing.lg)
+
                     // MARK: - Server
 
                     LOSectionHeader(title: "Connection")
@@ -161,6 +274,10 @@ struct SettingsView: View {
             }
         }
         .navigationBarHidden(true)
+        .task { await checkIntegrations() }
+        .sheet(isPresented: $showPlaudConnect) {
+            PlaudConnectSheet(isPresented: $showPlaudConnect, plaudConnected: $plaudConnected)
+        }
         .alert("Delete all data?", isPresented: $showDeleteAlert) {
             Button("Cancel", role: .cancel) {}
             Button("Delete", role: .destructive) {
@@ -204,5 +321,148 @@ struct SettingsView: View {
             .padding(.horizontal, Spacing.md)
             .padding(.vertical, Spacing.sm)
         }
+    }
+
+    // MARK: - Plaud Actions
+
+    private func checkIntegrations() async {
+        do {
+            let status = try await APIClient.shared.getPlaudStatus()
+            plaudConnected = status.connected
+        } catch {}
+        do {
+            let status = try await APIClient.shared.getCalendarStatus()
+            calendarConnected = status.connected
+        } catch {}
+    }
+
+    private func syncPlaud() async {
+        isSyncingPlaud = true
+        plaudSyncResult = nil
+        do {
+            let result = try await APIClient.shared.syncAllPlaud()
+            plaudSyncResult = result.newlySynced ?? 0
+        } catch {}
+        isSyncingPlaud = false
+    }
+
+    private func disconnectPlaud() async {
+        do {
+            _ = try await APIClient.shared.disconnectPlaud()
+            plaudConnected = false
+        } catch {}
+    }
+}
+
+// MARK: - Plaud Connect Sheet
+
+struct PlaudConnectSheet: View {
+    @Binding var isPresented: Bool
+    @Binding var plaudConnected: Bool
+    @State private var token = ""
+    @State private var region = "us"
+    @State private var isConnecting = false
+    @State private var errorMessage: String?
+
+    var body: some View {
+        NavigationView {
+            ZStack {
+                Color.loBackgroundFallback.ignoresSafeArea()
+
+                ScrollView {
+                    VStack(alignment: .leading, spacing: Spacing.lg) {
+                        Text("Connect Plaud NotePin")
+                            .font(.loTitle)
+                            .foregroundColor(Color.loPrimaryFallback)
+
+                        VStack(alignment: .leading, spacing: Spacing.sm) {
+                            Text("HOW TO GET TOKEN")
+                                .font(.loMicro)
+                                .tracking(1)
+                                .foregroundColor(Color.loTertiaryFallback)
+
+                            stepRow(1, "Open web.plaud.ai and log in")
+                            stepRow(2, "Open DevTools (F12) — Network tab")
+                            stepRow(3, "Refresh the page")
+                            stepRow(4, "Find request to api.plaud.ai")
+                            stepRow(5, "Copy the Authorization header value")
+                        }
+
+                        VStack(alignment: .leading, spacing: Spacing.xs) {
+                            Text("BEARER TOKEN")
+                                .font(.loMicro)
+                                .tracking(1)
+                                .foregroundColor(Color.loTertiaryFallback)
+
+                            TextField("Paste token here...", text: $token)
+                                .font(.loMonoSmall)
+                                .textFieldStyle(.plain)
+                                .padding(Spacing.sm)
+                                .background(Color.loSurfaceFallback)
+                                .cornerRadius(8)
+                                .foregroundColor(Color.loPrimaryFallback)
+                        }
+
+                        VStack(alignment: .leading, spacing: Spacing.xs) {
+                            Text("REGION")
+                                .font(.loMicro)
+                                .tracking(1)
+                                .foregroundColor(Color.loTertiaryFallback)
+
+                            Picker("", selection: $region) {
+                                Text("US").tag("us")
+                                Text("EU").tag("eu")
+                            }
+                            .pickerStyle(.segmented)
+                            .frame(width: 120)
+                        }
+
+                        if let error = errorMessage {
+                            Text(error)
+                                .font(.loCaption)
+                                .foregroundColor(.red)
+                        }
+
+                        LOButton(title: isConnecting ? "Connecting..." : "Connect", style: .primary) {
+                            Task { await connect() }
+                        }
+                        .disabled(token.isEmpty || isConnecting)
+                    }
+                    .padding(Spacing.lg)
+                }
+            }
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { isPresented = false }
+                        .foregroundColor(Color.loTertiaryFallback)
+                }
+            }
+        }
+    }
+
+    private func stepRow(_ number: Int, _ text: String) -> some View {
+        HStack(alignment: .top, spacing: Spacing.sm) {
+            Text("\(number)")
+                .font(.loMonoSmall)
+                .foregroundColor(Color.loAccentFallback)
+                .frame(width: 20)
+            Text(text)
+                .font(.loCaption)
+                .foregroundColor(Color.loPrimaryFallback)
+        }
+    }
+
+    private func connect() async {
+        isConnecting = true
+        errorMessage = nil
+        do {
+            _ = try await APIClient.shared.connectPlaud(token: token, region: region)
+            plaudConnected = true
+            isPresented = false
+        } catch {
+            errorMessage = "Connection failed: \(error.localizedDescription)"
+        }
+        isConnecting = false
     }
 }

@@ -237,3 +237,37 @@ def test_calendar_disconnect():
 def test_mentor_not_found():
     response = client.get("/api/v1/process/mentor/2024-01-01")
     assert response.status_code == 404
+
+
+def test_plaud_status_disconnected():
+    response = client.get("/api/v1/plaud/status")
+    assert response.status_code == 200
+    assert response.json()["connected"] is False
+
+
+def test_plaud_recordings_not_connected():
+    response = client.get("/api/v1/plaud/recordings")
+    assert response.status_code == 401
+
+
+def test_plaud_disconnect():
+    store.calendar_tokens["demo-user"] = {"plaud_token": "test", "plaud_region": "us"}
+    response = client.delete("/api/v1/plaud/disconnect")
+    assert response.status_code == 200
+
+    status = client.get("/api/v1/plaud/status")
+    assert status.json()["connected"] is False
+
+
+def test_meeting_analysis_not_found():
+    response = client.get("/api/v1/events/meetings/nonexistent/analysis")
+    assert response.status_code == 404
+
+
+def test_meeting_analysis_not_meeting():
+    store.events["idea1"] = {
+        "id": "idea1", "event_type": "idea", "title": "Idea",
+        "summary": "An idea", "started_at": "2024-01-01T10:00:00",
+    }
+    response = client.get("/api/v1/events/meetings/idea1/analysis")
+    assert response.status_code == 400

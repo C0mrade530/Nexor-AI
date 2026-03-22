@@ -188,6 +188,38 @@ class APIClient {
         return try await post(path, body: [:])
     }
 
+    // MARK: - Plaud NotePin
+
+    func getPlaudStatus() async throws -> PlaudStatus {
+        return try await get("/plaud/status")
+    }
+
+    func connectPlaud(token: String, region: String = "us") async throws -> EmptyResponse {
+        return try await post("/plaud/connect", body: [
+            "token": token,
+            "region": region
+        ])
+    }
+
+    func disconnectPlaud() async throws -> EmptyResponse {
+        return try await delete("/plaud/disconnect")
+    }
+
+    func getPlaudRecordings() async throws -> PlaudRecordingsResponse {
+        return try await get("/plaud/recordings")
+    }
+
+    func syncAllPlaud() async throws -> PlaudSyncResult {
+        return try await post("/plaud/sync-and-process", body: [:])
+    }
+
+    func syncOnePlaud(fileId: String, autoProcess: Bool = true) async throws -> PlaudSyncOneResult {
+        return try await post("/plaud/sync/one", body: [
+            "file_id": fileId,
+            "auto_process": autoProcess
+        ] as [String: Any])
+    }
+
     // MARK: - Private Helpers
 
     private func get<T: Decodable>(_ path: String) async throws -> T {
