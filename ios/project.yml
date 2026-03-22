@@ -3,6 +3,7 @@ options:
   bundleIdPrefix: com.nexor
   deploymentTarget:
     iOS: "17.0"
+    watchOS: "10.0"
   xcodeVersion: "15.0"
   createIntermediateGroups: true
 
@@ -33,6 +34,23 @@ targets:
       path: LifeOS/Info.plist
     entitlements:
       path: LifeOS/LifeOS.entitlements
+    dependencies:
+      - target: NexorWatch
+
+  NexorWatch:
+    type: application
+    platform: watchOS
+    sources:
+      - path: NexorWatch
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.nexor.app.watchkitapp
+        INFOPLIST_FILE: NexorWatch/Info.plist
+        CODE_SIGN_STYLE: Automatic
+        GENERATE_INFOPLIST_FILE: false
+    info:
+      path: NexorWatch/Info.plist
+    dependencies: []
 
   LifeOSTests:
     type: bundle.unit-test
@@ -50,6 +68,7 @@ schemes:
     build:
       targets:
         LifeOS: all
+        NexorWatch: all
         LifeOSTests: [test]
     run:
       config: Debug
@@ -59,5 +78,15 @@ schemes:
         - LifeOSTests
     profile:
       config: Release
+    archive:
+      config: Release
+
+  NexorWatch:
+    build:
+      targets:
+        NexorWatch: all
+    run:
+      config: Debug
+      executable: NexorWatch
     archive:
       config: Release

@@ -56,6 +56,12 @@ class Settings(BaseSettings):
     google_calendar_client_id: str = ""
     google_calendar_client_secret: str = ""
 
+    # Telegram Bot
+    telegram_bot_token: str = ""
+
+    # Tinkoff Invest
+    tinkoff_invest_token: str = ""
+
     # Vector DB
     chroma_persist_dir: str = "./chroma_data"
 

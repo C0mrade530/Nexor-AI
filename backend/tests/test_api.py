@@ -15,6 +15,7 @@ client = TestClient(app)
 def clear_store():
     """Clear in-memory store between tests."""
     from app.services import health, finance, notifications, zapier
+    from app.services.telegram_bot import telegram_users, telegram_settings
     store.sessions.clear()
     store.chunks.clear()
     store.events.clear()
@@ -31,6 +32,8 @@ def clear_store():
     notifications.scheduled_notifications.clear()
     zapier.webhooks.clear()
     zapier.webhook_log.clear()
+    telegram_users.clear()
+    telegram_settings.clear()
     yield
     store.sessions.clear()
     store.chunks.clear()
@@ -487,3 +490,106 @@ def test_webhook_delivery_log():
     response = client.get("/api/v1/webhooks/log")
     assert response.status_code == 200
     assert response.json()["total"] == 0
+
+
+# ==================== TELEGRAM ====================
+
+def test_telegram_status_not_linked():
+    response = client.get("/api/v1/telegram/status")
+    assert response.status_code == 200
+    assert response.json()["linked"] is False
+
+
+def test_telegram_link():
+    response = client.post("/api/v1/telegram/link", json={
+        "user_id": "demo-user",
+        "chat_id": 123456789,
+    })
+    assert response.status_code == 200
+    assert response.json()["linked"] is True
+    assert response.json()["chat_id"] == 123456789
+
+    status = client.get("/api/v1/telegram/status")
+    assert status.json()["linked"] is True
+    assert status.json()["enabled"] is True
+
+
+def test_telegram_unlink():
+    # Link first
+    client.post("/api/v1/telegram/link", json={"chat_id": 111})
+    response = client.delete("/api/v1/telegram/unlink")
+    assert response.status_code == 200
+    assert response.json()["unlinked"] is True
+
+    status = client.get("/api/v1/telegram/status")
+    assert status.json()["linked"] is False
+
+
+def test_telegram_settings_update():
+    # Link first
+    client.post("/api/v1/telegram/link", json={"chat_id": 222})
+    response = client.post("/api/v1/telegram/settings", json={
+        "reminders": False,
+        "daily_summary": False,
+    })
+    assert response.status_code == 200
+    assert response.json()["reminders"] is False
+    assert response.json()["daily_summary"] is False
+
+
+def test_telegram_send_not_linked():
+    response = client.post("/api/v1/telegram/send?text=hello")
+    assert response.status_code == 200
+    assert response.json()["sent"] is False
+    assert response.json()["reason"] == "not_linked"
+
+
+def test_telegram_send_summary_not_linked():
+    response = client.post("/api/v1/telegram/send-summary")
+    assert response.status_code == 200
+
+
+def test_telegram_send_reminders():
+    response = client.post("/api/v1/telegram/send-reminders")
+    assert response.status_code == 200
+
+
+# ==================== TINKOFF ====================
+
+def test_tinkoff_import_text_empty():
+    response = client.post("/api/v1/tinkoff/import/text")
+    assert response.status_code == 200
+    assert response.json()["error"] == "No CSV content provided"
+
+
+def test_tinkoff_import_text_csv():
+    csv_content = (
+        "Дата операции;Дата платежа;Номер карты;Статус;Сумма операции;"
+        "Валюта операции;Сумма платежа;Валюта платежа;Кэшбэк;Категория;MCC;Описание\n"
+        "22.03.2026 10:30:00;22.03.2026;*1234;OK;-1500.00;"
+        "RUB;-1500.00;RUB;15;Супермаркеты;5411;Пятёрочка\n"
+        "22.03.2026 12:00:00;22.03.2026;*1234;OK;-350.50;"
+        "RUB;-350.50;RUB;0;Такси;4121;Яндекс.Такси"
+    )
+    response = client.post(
+        "/api/v1/tinkoff/import/text",
+        params={"csv_content": csv_content},
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["total_in_file"] == 2
+    assert data["imported"] == 2
+
+
+def test_tinkoff_import_csv_file():
+    csv_bytes = (
+        "Дата операции;Статус;Сумма платежа;Категория;Описание\n"
+        "01.01.2026;OK;-2000;Рестораны;Кафе\n"
+    ).encode("utf-8")
+    response = client.post(
+        "/api/v1/tinkoff/import/csv",
+        files={"file": ("statement.csv", csv_bytes, "text/csv")},
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["total_in_file"] == 1

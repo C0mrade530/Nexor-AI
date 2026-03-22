@@ -7,8 +7,14 @@ struct OnboardingView: View {
     @State private var password = ""
     @State private var isLoading = false
     @State private var showAuth = false
+    @State private var showPermissions = false
     @State private var serverURL = ""
     @State private var showServerConfig = false
+
+    // Permissions state
+    @State private var micGranted = false
+    @State private var healthGranted = false
+    @State private var notifGranted = false
 
     var body: some View {
         ZStack {
@@ -16,6 +22,9 @@ struct OnboardingView: View {
 
             if showAuth {
                 authView
+                    .transition(.move(edge: .trailing).combined(with: .opacity))
+            } else if showPermissions {
+                permissionsView
                     .transition(.move(edge: .trailing).combined(with: .opacity))
             } else {
                 onboardingPages
@@ -41,21 +50,39 @@ struct OnboardingView: View {
                 onboardingPage(
                     icon: "sparkle",
                     title: "Understand",
-                    subtitle: "AI segments your speech\ninto events and ideas"
+                    subtitle: "AI segments your speech\ninto events, ideas, and tasks"
                 ).tag(1)
 
                 onboardingPage(
-                    icon: "arrow.up.right",
-                    title: "Act",
-                    subtitle: "Get summaries, tasks,\nand coaching daily"
+                    icon: "heart",
+                    title: "Energy",
+                    subtitle: "Apple Watch tracks sleep,\nsteps, and workouts"
                 ).tag(2)
+
+                onboardingPage(
+                    icon: "banknote",
+                    title: "Finance",
+                    subtitle: "Import Tinkoff statements\nand get AI spending advice"
+                ).tag(3)
+
+                onboardingPage(
+                    icon: "paperplane",
+                    title: "Telegram",
+                    subtitle: "Send voice messages\nand get reminders in chat"
+                ).tag(4)
+
+                onboardingPage(
+                    icon: "arrow.up.right",
+                    title: "Grow",
+                    subtitle: "Daily coaching from a\n$1M AI mentor"
+                ).tag(5)
             }
             .tabViewStyle(.page(indexDisplayMode: .never))
             .frame(height: 340)
 
             // Page indicators
             HStack(spacing: Spacing.xs) {
-                ForEach(0..<3, id: \.self) { i in
+                ForEach(0..<6, id: \.self) { i in
                     Capsule()
                         .fill(i == currentPage ? Color.loPrimaryFallback : Color.loTertiaryFallback.opacity(0.4))
                         .frame(width: i == currentPage ? 24 : 6, height: 6)
@@ -70,7 +97,7 @@ struct OnboardingView: View {
             VStack(spacing: Spacing.sm) {
                 Button {
                     withAnimation(.easeInOut(duration: 0.4)) {
-                        showAuth = true
+                        showPermissions = true
                     }
                 } label: {
                     Text("Get Started")
@@ -109,6 +136,149 @@ struct OnboardingView: View {
                 .multilineTextAlignment(.center)
                 .lineSpacing(4)
         }
+    }
+
+    // MARK: - Permissions View
+
+    private var permissionsView: some View {
+        VStack(spacing: 0) {
+            HStack {
+                Button {
+                    withAnimation(.easeInOut(duration: 0.4)) {
+                        showPermissions = false
+                    }
+                } label: {
+                    Image(systemName: "arrow.left")
+                        .font(.system(size: 18, weight: .light))
+                        .foregroundColor(Color.loPrimaryFallback)
+                }
+                Spacer()
+            }
+            .padding(.horizontal, Spacing.md)
+            .padding(.top, Spacing.md)
+
+            Spacer()
+
+            VStack(spacing: Spacing.xl) {
+                VStack(spacing: Spacing.xs) {
+                    Text("Permissions")
+                        .font(.loLargeTitle)
+                        .foregroundColor(Color.loPrimaryFallback)
+                    Text("Nexor needs a few permissions to work")
+                        .font(.loBody)
+                        .foregroundColor(Color.loSecondaryFallback)
+                }
+
+                VStack(spacing: Spacing.md) {
+                    permissionRow(
+                        icon: "mic",
+                        title: "Microphone",
+                        description: "Record audio throughout your day",
+                        granted: micGranted
+                    ) {
+                        // Mic permission handled on first recording
+                        micGranted = true
+                    }
+
+                    permissionRow(
+                        icon: "heart",
+                        title: "HealthKit",
+                        description: "Sleep, steps, workouts from Apple Watch",
+                        granted: healthGranted
+                    ) {
+                        Task {
+                            healthGranted = await HealthKitService.shared.requestAuthorization()
+                        }
+                    }
+
+                    permissionRow(
+                        icon: "bell",
+                        title: "Notifications",
+                        description: "Reminders and daily summary alerts",
+                        granted: notifGranted
+                    ) {
+                        Task {
+                            notifGranted = await NotificationService.shared.requestPermission()
+                        }
+                    }
+                }
+                .padding(.horizontal, Spacing.lg)
+            }
+
+            Spacer()
+
+            VStack(spacing: Spacing.sm) {
+                Button {
+                    withAnimation(.easeInOut(duration: 0.4)) {
+                        showPermissions = false
+                        showAuth = true
+                    }
+                } label: {
+                    Text("Continue")
+                        .font(.loHeadline)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, Spacing.md)
+                        .background(Color.loPrimaryFallback)
+                        .foregroundColor(Color.loBackgroundFallback)
+                        .cornerRadius(12)
+                }
+
+                Button("Skip permissions") {
+                    withAnimation(.easeInOut(duration: 0.4)) {
+                        showPermissions = false
+                        showAuth = true
+                    }
+                }
+                .font(.loCaption)
+                .foregroundColor(Color.loTertiaryFallback)
+            }
+            .padding(.horizontal, Spacing.lg)
+            .padding(.bottom, Spacing.xxl)
+        }
+    }
+
+    private func permissionRow(
+        icon: String,
+        title: String,
+        description: String,
+        granted: Bool,
+        action: @escaping () -> Void
+    ) -> some View {
+        HStack(spacing: Spacing.md) {
+            Image(systemName: icon)
+                .font(.system(size: 20, weight: .light))
+                .foregroundColor(granted ? .green : Color.loAccentFallback)
+                .frame(width: 32)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.loBody)
+                    .foregroundColor(Color.loPrimaryFallback)
+                Text(description)
+                    .font(.loMicro)
+                    .foregroundColor(Color.loTertiaryFallback)
+            }
+
+            Spacer()
+
+            if granted {
+                Image(systemName: "checkmark.circle.fill")
+                    .foregroundColor(.green)
+            } else {
+                Button("Allow") { action() }
+                    .font(.loCaption)
+                    .foregroundColor(Color.loAccentFallback)
+                    .padding(.horizontal, Spacing.sm)
+                    .padding(.vertical, Spacing.xxs)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 8)
+                            .stroke(Color.loAccentFallback, lineWidth: 1)
+                    )
+            }
+        }
+        .padding(Spacing.sm)
+        .background(Color.loSurfaceFallback)
+        .cornerRadius(12)
     }
 
     // MARK: - Auth View

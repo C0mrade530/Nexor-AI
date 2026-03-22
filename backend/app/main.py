@@ -6,7 +6,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api.v1 import audio, calendar, events, finance, health, notifications, plaud, process, search, webhooks
+from app.api.v1 import audio, calendar, events, finance, health, notifications, plaud, process, search, telegram, tinkoff, webhooks
 from app.core.config import settings
 from app.core.database import close_db, init_db
 
@@ -57,6 +57,8 @@ app.include_router(health.router, prefix=settings.api_prefix)
 app.include_router(finance.router, prefix=settings.api_prefix)
 app.include_router(notifications.router, prefix=settings.api_prefix)
 app.include_router(webhooks.router, prefix=settings.api_prefix)
+app.include_router(telegram.router, prefix=settings.api_prefix)
+app.include_router(tinkoff.router, prefix=settings.api_prefix)
 
 
 @app.get("/health")
