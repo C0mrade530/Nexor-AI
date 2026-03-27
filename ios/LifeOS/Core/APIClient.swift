@@ -396,7 +396,7 @@ class APIClient {
         return try decoder.decode(T.self, from: data)
     }
 
-    private func post<T: Decodable>(_ path: String, body: [String: Any]) async throws -> T {
+    func post<T: Decodable>(_ path: String, body: [String: Any]) async throws -> T {
         guard let url = URL(string: "\(baseURLString)\(path)") else {
             throw APIError.invalidURL
         }
