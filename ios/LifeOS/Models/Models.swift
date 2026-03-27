@@ -1144,6 +1144,41 @@ struct LabResult: Codable, Identifiable {
         case testType = "test_type"
         case createdAt = "created_at"
     }
+
+    var biomarkersCount: Int { biomarkers?.count ?? 0 }
+
+    var optimal: Int {
+        biomarkers?.values.filter { $0.status == "optimal" }.count ?? 0
+    }
+
+    var normal: Int {
+        biomarkers?.values.filter { $0.status == "normal" }.count ?? 0
+    }
+
+    var borderline: Int {
+        biomarkers?.values.filter { $0.status == "borderline" }.count ?? 0
+    }
+
+    var outOfRange: Int {
+        biomarkers?.values.filter { $0.status == "out_of_range" }.count ?? 0
+    }
+
+    var topBiomarkers: [BiomarkerPreview] {
+        guard let bm = biomarkers else { return [] }
+        return bm.map { key, val in
+            BiomarkerPreview(
+                id: key,
+                name: val.name ?? key,
+                displayValue: val.value.map { String(format: "%.1f", $0) } ?? "-",
+                unit: val.unit ?? "",
+                status: val.status ?? "normal"
+            )
+        }
+        .sorted { s1, s2 in
+            let order = ["out_of_range": 0, "borderline": 1, "normal": 2, "optimal": 3]
+            return (order[s1.status] ?? 4) < (order[s2.status] ?? 4)
+        }
+    }
 }
 
 struct BiomarkerValue: Codable {
