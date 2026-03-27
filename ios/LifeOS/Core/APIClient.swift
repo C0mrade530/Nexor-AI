@@ -246,6 +246,42 @@ class APIClient {
         return try await delete("/mentor/history")
     }
 
+    // MARK: - Lab Results
+
+    func getLabResults(limit: Int = 10) async throws -> LabResultsListResponse {
+        return try await get("/labs/results?limit=\(limit)")
+    }
+
+    func getLabResult(id: String) async throws -> LabResult {
+        return try await get("/labs/results/\(id)")
+    }
+
+    func addLabResults(biomarkers: [String: Any], date: String? = nil, labName: String? = nil, gender: String = "default", notes: String? = nil) async throws -> LabAddResponse {
+        var body: [String: Any] = ["biomarkers": biomarkers, "gender": gender]
+        if let date = date { body["date"] = date }
+        if let labName = labName { body["lab_name"] = labName }
+        if let notes = notes { body["notes"] = notes }
+        return try await post("/labs/results", body: body)
+    }
+
+    func parseLabText(text: String, date: String? = nil) async throws -> LabAddResponse {
+        var body: [String: Any] = ["text": text]
+        if let date = date { body["date"] = date }
+        return try await post("/labs/parse", body: body)
+    }
+
+    func deleteLabResult(id: String) async throws -> EmptyResponse {
+        return try await delete("/labs/results/\(id)")
+    }
+
+    func getBiomarkerTrend(biomarker: String) async throws -> BiomarkerTrend {
+        return try await get("/labs/trends/\(biomarker)")
+    }
+
+    func getLabReferences() async throws -> ReferenceRangesResponse {
+        return try await get("/labs/references")
+    }
+
     // MARK: - Finance
 
     func getFinanceSummary(month: String? = nil) async throws -> FinanceMonthlySummary {

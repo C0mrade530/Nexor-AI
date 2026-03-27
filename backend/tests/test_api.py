@@ -17,6 +17,7 @@ def clear_store():
     from app.services import health, finance, notifications, zapier
     from app.services.telegram_bot import telegram_users, telegram_settings
     from app.services.mentor_chat import chat_history
+    from app.services.lab_results import lab_results
     store.sessions.clear()
     store.chunks.clear()
     store.events.clear()
@@ -36,6 +37,7 @@ def clear_store():
     telegram_users.clear()
     telegram_settings.clear()
     chat_history.clear()
+    lab_results.clear()
     yield
     store.sessions.clear()
     store.chunks.clear()
@@ -698,3 +700,106 @@ def test_mentor_clear_history():
     response = client.delete("/api/v1/mentor/history")
     assert response.status_code == 200
     assert response.json()["cleared"] is True
+
+
+# ==================== LAB RESULTS ====================
+
+def test_lab_results_empty():
+    response = client.get("/api/v1/labs/results")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["results"] == []
+    assert data["total"] == 0
+
+
+def test_lab_add_results():
+    response = client.post("/api/v1/labs/results", json={
+        "biomarkers": {
+            "hemoglobin": 145,
+            "glucose": 5.2,
+            "vitamin_d": 38,
+        },
+        "gender": "male",
+        "date": "2026-03-27",
+        "lab_name": "Invitro",
+    })
+    assert response.status_code == 200
+    data = response.json()
+    assert data["biomarkers_count"] == 3
+    assert "id" in data
+
+
+def test_lab_get_result_by_id():
+    # Add first
+    add = client.post("/api/v1/labs/results", json={
+        "biomarkers": {"glucose": 5.5},
+    })
+    result_id = add.json()["id"]
+
+    response = client.get(f"/api/v1/labs/results/{result_id}")
+    assert response.status_code == 200
+    assert response.json()["id"] == result_id
+    assert "glucose" in response.json()["biomarkers"]
+
+
+def test_lab_get_result_not_found():
+    response = client.get("/api/v1/labs/results/nonexistent")
+    assert response.status_code == 404
+
+
+def test_lab_delete_result():
+    add = client.post("/api/v1/labs/results", json={
+        "biomarkers": {"glucose": 5.0},
+    })
+    result_id = add.json()["id"]
+
+    response = client.delete(f"/api/v1/labs/results/{result_id}")
+    assert response.status_code == 200
+    assert response.json()["deleted"] is True
+
+    # Verify deleted
+    get_resp = client.get(f"/api/v1/labs/results/{result_id}")
+    assert get_resp.status_code == 404
+
+
+def test_lab_biomarker_trends():
+    # Add two results with same biomarker
+    client.post("/api/v1/labs/results", json={
+        "biomarkers": {"vitamin_d": 25},
+        "date": "2026-01-15",
+    })
+    client.post("/api/v1/labs/results", json={
+        "biomarkers": {"vitamin_d": 38},
+        "date": "2026-03-27",
+    })
+
+    response = client.get("/api/v1/labs/trends/vitamin_d")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["biomarker"] == "vitamin_d"
+    assert data["total_tests"] == 2
+    assert len(data["points"]) == 2
+
+
+def test_lab_reference_ranges():
+    response = client.get("/api/v1/labs/references")
+    assert response.status_code == 200
+    data = response.json()
+    assert "ranges" in data
+    assert "hemoglobin" in data["ranges"]
+    assert "glucose" in data["ranges"]
+
+
+def test_lab_biomarker_status_annotation():
+    response = client.post("/api/v1/labs/results", json={
+        "biomarkers": {
+            "hemoglobin": 145,
+            "glucose": 5.0,
+        },
+        "gender": "male",
+    })
+    assert response.status_code == 200
+    data = response.json()
+    assert data["biomarkers_count"] == 2
+    # Both values are in normal/optimal range
+    assert data["optimal"] + data["normal"] >= 1

@@ -1126,3 +1126,92 @@ struct MentorInsight: Codable {
         case generatedAt = "generated_at"
     }
 }
+
+// MARK: - Lab Results
+
+struct LabResult: Codable, Identifiable {
+    let id: String
+    let date: String
+    let labName: String?
+    let testType: String?
+    let biomarkers: [String: BiomarkerValue]?
+    let notes: String?
+    let createdAt: String?
+
+    enum CodingKeys: String, CodingKey {
+        case id, date, biomarkers, notes
+        case labName = "lab_name"
+        case testType = "test_type"
+        case createdAt = "created_at"
+    }
+}
+
+struct BiomarkerValue: Codable {
+    let name: String?
+    let value: Double?
+    let unit: String?
+    let referenceRange: [Double]?
+    let status: String?
+
+    enum CodingKeys: String, CodingKey {
+        case name, value, unit, status
+        case referenceRange = "reference_range"
+    }
+}
+
+struct LabResultsListResponse: Codable {
+    let results: [LabResult]
+    let total: Int
+}
+
+struct LabAddResponse: Codable {
+    let id: String?
+    let date: String?
+    let biomarkersCount: Int?
+    let outOfRange: Int?
+    let borderline: Int?
+    let optimal: Int?
+    let normal: Int?
+
+    enum CodingKeys: String, CodingKey {
+        case id, date, optimal, normal, borderline
+        case biomarkersCount = "biomarkers_count"
+        case outOfRange = "out_of_range"
+    }
+}
+
+struct BiomarkerTrend: Codable {
+    let biomarker: String
+    let unit: String?
+    let referenceRange: [Double]?
+    let points: [BiomarkerTrendPoint]
+    let totalTests: Int
+
+    enum CodingKeys: String, CodingKey {
+        case biomarker, unit, points
+        case referenceRange = "reference_range"
+        case totalTests = "total_tests"
+    }
+}
+
+struct BiomarkerTrendPoint: Codable {
+    let date: String
+    let value: Double
+    let status: String
+}
+
+struct ReferenceRangesResponse: Codable {
+    let ranges: [String: ReferenceRange]
+}
+
+struct ReferenceRange: Codable {
+    let unit: String?
+    let male: [Double]?
+    let female: [Double]?
+    let defaultRange: [Double]?
+
+    enum CodingKeys: String, CodingKey {
+        case unit, male, female
+        case defaultRange = "default"
+    }
+}

@@ -31,6 +31,7 @@ struct HealthView: View {
                         case 1: sleepTab(d)
                         case 2: strainTab(d)
                         case 3: hrvTab(d)
+                        case 4: LabResultsView()
                         default: overviewTab(d)
                         }
                     } else {
@@ -157,6 +158,7 @@ struct HealthView: View {
                 tabButton("Sleep", index: 1)
                 tabButton("Strain", index: 2)
                 tabButton("HRV", index: 3)
+                tabButton("Labs", index: 4)
             }
             .padding(.horizontal, Spacing.lg)
         }
