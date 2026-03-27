@@ -34,8 +34,7 @@ targets:
       path: LifeOS/Info.plist
     entitlements:
       path: LifeOS/LifeOS.entitlements
-    dependencies:
-      - target: NexorWatch
+    dependencies: []
 
   NexorWatch:
     type: application
