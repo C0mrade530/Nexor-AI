@@ -135,9 +135,9 @@ struct LabResultsView: View {
             // Top biomarkers preview
             if !result.topBiomarkers.isEmpty {
                 HStack(spacing: Spacing.sm) {
-                    ForEach(result.topBiomarkers.prefix(4), id: \.name) { bm in
+                    ForEach(Array(result.topBiomarkers.prefix(4))) { bm in
                         VStack(spacing: 2) {
-                            Text(bm.shortName)
+                            Text(String(bm.name.prefix(6)))
                                 .font(.system(size: 9))
                                 .foregroundColor(Color.loTertiaryFallback)
                             Text(bm.displayValue)
@@ -198,9 +198,8 @@ struct AddLabResultSheet: View {
     @State private var errorMessage: String?
 
     // Manual entry
-    @State private var manualBiomarkers: [(String, String)] = [
-        ("", "")
-    ]
+    @State private var manualNames: [String] = [""]
+    @State private var manualValues: [String] = [""]
 
     var body: some View {
         NavigationView {
@@ -278,16 +277,16 @@ struct AddLabResultSheet: View {
                 .font(.loCaption)
                 .foregroundColor(Color.loTertiaryFallback)
 
-            ForEach(Array(manualBiomarkers.enumerated()), id: \.offset) { index, _ in
+            ForEach(manualNames.indices, id: \.self) { index in
                 HStack(spacing: Spacing.sm) {
-                    TextField("Biomarker", text: binding(for: index, isName: true))
+                    TextField("Biomarker", text: $manualNames[index])
                         .font(.loCaption)
                         .foregroundColor(Color.loPrimaryFallback)
                         .padding(Spacing.xs)
                         .background(Color.loSurfaceFallback)
                         .cornerRadius(6)
 
-                    TextField("Value", text: binding(for: index, isName: false))
+                    TextField("Value", text: $manualValues[index])
                         .font(.loMonoSmall)
                         .keyboardType(.decimalPad)
                         .foregroundColor(Color.loPrimaryFallback)
@@ -296,9 +295,10 @@ struct AddLabResultSheet: View {
                         .background(Color.loSurfaceFallback)
                         .cornerRadius(6)
 
-                    if manualBiomarkers.count > 1 {
+                    if manualNames.count > 1 {
                         Button {
-                            manualBiomarkers.remove(at: index)
+                            manualNames.remove(at: index)
+                            manualValues.remove(at: index)
                         } label: {
                             Image(systemName: "minus.circle")
                                 .font(.system(size: 16))
@@ -309,7 +309,8 @@ struct AddLabResultSheet: View {
             }
 
             Button {
-                manualBiomarkers.append(("", ""))
+                manualNames.append("")
+                manualValues.append("")
             } label: {
                 HStack(spacing: Spacing.xs) {
                     Image(systemName: "plus.circle")
@@ -330,11 +331,12 @@ struct AddLabResultSheet: View {
             FlowLayout(spacing: 6) {
                 ForEach(["Hemoglobin", "Glucose", "Vitamin D", "Ferritin", "TSH", "Total Cholesterol", "LDL", "HDL", "ALT", "Creatinine", "Vitamin B12", "Iron"], id: \.self) { name in
                     Button {
-                        if !manualBiomarkers.contains(where: { $0.0 == name }) {
-                            if manualBiomarkers.last?.0.isEmpty == true {
-                                manualBiomarkers[manualBiomarkers.count - 1].0 = name
+                        if !manualNames.contains(name) {
+                            if manualNames.last?.isEmpty == true {
+                                manualNames[manualNames.count - 1] = name
                             } else {
-                                manualBiomarkers.append((name, ""))
+                                manualNames.append(name)
+                                manualValues.append("")
                             }
                         }
                     } label: {
@@ -351,20 +353,6 @@ struct AddLabResultSheet: View {
         }
     }
 
-    private func binding(for index: Int, isName: Bool) -> Binding<String> {
-        Binding(
-            get: { index < manualBiomarkers.count ? (isName ? manualBiomarkers[index].0 : manualBiomarkers[index].1) : "" },
-            set: { newValue in
-                guard index < manualBiomarkers.count else { return }
-                if isName {
-                    manualBiomarkers[index].0 = newValue
-                } else {
-                    manualBiomarkers[index].1 = newValue
-                }
-            }
-        )
-    }
-
     private func submit() async {
         isSubmitting = true
         errorMessage = nil
@@ -379,7 +367,9 @@ struct AddLabResultSheet: View {
                 _ = try await APIClient.shared.parseLabText(text: pastedText, date: date.isEmpty ? nil : date)
             } else {
                 var biomarkers: [String: Double] = [:]
-                for (name, value) in manualBiomarkers {
+                for i in manualNames.indices {
+                    let name = manualNames[i]
+                    let value = manualValues[i]
                     if !name.isEmpty, let v = Double(value) {
                         biomarkers[name] = v
                     }
@@ -439,7 +429,7 @@ struct LabResultDetailView: View {
                         LOSectionHeader(title: "Biomarkers")
 
                         VStack(spacing: 1) {
-                            ForEach(result.topBiomarkers, id: \.name) { bm in
+                            ForEach(result.topBiomarkers) { bm in
                                 biomarkerRow(bm)
                             }
                         }
