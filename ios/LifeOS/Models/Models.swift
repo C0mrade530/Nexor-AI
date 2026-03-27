@@ -1215,3 +1215,11 @@ struct ReferenceRange: Codable {
         case defaultRange = "default"
     }
 }
+
+struct BiomarkerPreview: Identifiable {
+    let id: String
+    let name: String
+    let displayValue: String
+    let unit: String
+    let status: String
+}
