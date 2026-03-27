@@ -16,6 +16,7 @@ def clear_store():
     """Clear in-memory store between tests."""
     from app.services import health, finance, notifications, zapier
     from app.services.telegram_bot import telegram_users, telegram_settings
+    from app.services.mentor_chat import chat_history
     store.sessions.clear()
     store.chunks.clear()
     store.events.clear()
@@ -34,6 +35,7 @@ def clear_store():
     zapier.webhook_log.clear()
     telegram_users.clear()
     telegram_settings.clear()
+    chat_history.clear()
     yield
     store.sessions.clear()
     store.chunks.clear()
@@ -296,8 +298,9 @@ def test_health_today_empty():
 
 
 def test_health_sync_and_today():
+    today_str = datetime.utcnow().strftime("%Y-%m-%d")
     response = client.post("/api/v1/health/sync", json={
-        "date": "2026-03-22",
+        "date": today_str,
         "sleep": {"total_hours": 7.5, "quality_score": 82},
         "activity": {"steps": 9200, "active_minutes": 45, "active_calories": 380},
         "heart": {"resting_hr": 60, "hrv": 48},
@@ -593,3 +596,105 @@ def test_tinkoff_import_csv_file():
     assert response.status_code == 200
     data = response.json()
     assert data["total_in_file"] == 1
+
+
+# ==================== HEALTH ANALYTICS (ATHLYTIC) ====================
+
+def _seed_health_data():
+    """Seed health data for analytics tests."""
+    from app.services.health import health_data
+    health_data["demo-user"] = [
+        {
+            "id": "h1", "user_id": "demo-user",
+            "date": datetime.utcnow().strftime("%Y-%m-%d"),
+            "sleep": {"total_hours": 7.5, "deep_hours": 1.5, "rem_hours": 1.8, "light_hours": 4.2, "quality_score": 82, "bed_time": "23:30", "wake_time": "07:00"},
+            "activity": {"steps": 9200, "active_minutes": 45, "active_calories": 380},
+            "workouts": [{"type": "running", "duration_minutes": 30, "calories": 280, "avg_heart_rate": 145}],
+            "heart": {"resting_hr": 58, "hrv": 48, "avg_hr": 72, "max_hr": 155},
+        },
+    ]
+
+
+def test_health_recovery():
+    _seed_health_data()
+    response = client.get("/api/v1/health/recovery")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["available"] is True
+    assert 0 <= data["recovery_score"] <= 100
+    assert data["zone"] in ("green", "yellow", "red")
+
+
+def test_health_battery():
+    _seed_health_data()
+    response = client.get("/api/v1/health/battery")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["available"] is True
+    assert 0 <= data["battery_remaining"] <= 100
+    assert data["capacity"] in ("high", "medium", "low")
+
+
+def test_health_sleep_analysis():
+    _seed_health_data()
+    response = client.get("/api/v1/health/sleep")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["available"] is True
+    assert 0 <= data["score"] <= 100
+    assert "stages" in data
+    assert data["stages"]["deep"]["hours"] == 1.5
+
+
+def test_health_strain():
+    _seed_health_data()
+    response = client.get("/api/v1/health/strain")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["available"] is True
+    assert data["strain_score"] > 0
+    assert len(data["workouts"]) == 1
+
+
+def test_health_hrv_analysis():
+    _seed_health_data()
+    response = client.get("/api/v1/health/hrv")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["available"] is True
+    assert data["current"] == 48
+
+
+def test_health_dashboard():
+    _seed_health_data()
+    response = client.get("/api/v1/health/dashboard")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["available"] is True
+    assert "recovery" in data
+    assert "battery" in data
+    assert "sleep" in data
+    assert "strain" in data
+    assert "hrv" in data
+
+
+def test_health_recovery_empty():
+    response = client.get("/api/v1/health/recovery")
+    assert response.status_code == 200
+    assert response.json()["available"] is False
+
+
+# ==================== MENTOR CHAT ====================
+
+def test_mentor_history_empty():
+    response = client.get("/api/v1/mentor/history")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["messages"] == []
+    assert data["total"] == 0
+
+
+def test_mentor_clear_history():
+    response = client.delete("/api/v1/mentor/history")
+    assert response.status_code == 200
+    assert response.json()["cleared"] is True

@@ -71,3 +71,39 @@ async def get_health_goals(user_id: str = "demo-user"):
 async def get_goal_progress(user_id: str = "demo-user"):
     """Get today's progress towards health goals."""
     return await health_service.get_goal_progress(user_id)
+
+
+@router.get("/recovery")
+async def get_recovery_analysis(user_id: str = "demo-user"):
+    """Athlytic-style recovery score (HRV, sleep, resting HR)."""
+    return await health_service.get_recovery_analysis(user_id)
+
+
+@router.get("/battery")
+async def get_battery_readiness(user_id: str = "demo-user"):
+    """Battery/readiness gauge — capacity remaining today."""
+    return await health_service.get_battery_readiness(user_id)
+
+
+@router.get("/sleep")
+async def get_sleep_analysis(user_id: str = "demo-user"):
+    """Detailed sleep analysis with stages, score, insights."""
+    return await health_service.get_sleep_analysis(user_id)
+
+
+@router.get("/strain")
+async def get_strain_tracking(user_id: str = "demo-user"):
+    """Daily strain tracking with workout breakdown."""
+    return await health_service.get_strain_tracking(user_id)
+
+
+@router.get("/hrv")
+async def get_hrv_analysis(user_id: str = "demo-user"):
+    """Deep HRV analysis with baseline, trends, interpretation."""
+    return await health_service.get_hrv_analysis(user_id)
+
+
+@router.get("/dashboard")
+async def get_full_dashboard(user_id: str = "demo-user"):
+    """Complete Athlytic-style dashboard in one call."""
+    return await health_service.get_full_dashboard(user_id)

@@ -1,12 +1,14 @@
 """HealthKit integration service — sync Apple Watch / iPhone health data.
 
-Receives health data from the iOS app and provides AI-powered
-wellness recommendations based on sleep, activity, workouts, and energy levels.
+Receives health data from the iOS app and provides Athlytic-style
+analytics: recovery score, readiness/battery, sleep analysis, strain tracking,
+HRV trends, and AI-powered wellness coaching.
 """
 
 import logging
+import math
 import uuid
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from app.core import store
 from app.core.config import settings
@@ -19,54 +21,14 @@ health_goals: dict[str, dict] = {}  # {user_id: {goals}}
 
 
 class HealthService:
-    """Processes health data from HealthKit and generates wellness insights."""
+    """Processes health data from HealthKit and generates Athlytic-style analytics."""
 
     async def sync_health_data(
         self,
         user_id: str,
         data: dict,
     ) -> dict:
-        """Receive and store health data from iOS HealthKit.
-
-        Expected data format:
-        {
-            "date": "2026-03-22",
-            "sleep": {
-                "total_hours": 7.2,
-                "deep_hours": 1.5,
-                "rem_hours": 1.8,
-                "light_hours": 3.9,
-                "awake_minutes": 15,
-                "bed_time": "23:30",
-                "wake_time": "06:45",
-                "quality_score": 78  # 0-100
-            },
-            "activity": {
-                "steps": 8432,
-                "distance_km": 6.1,
-                "active_calories": 420,
-                "total_calories": 2100,
-                "active_minutes": 45,
-                "stand_hours": 10
-            },
-            "workouts": [
-                {
-                    "type": "running",
-                    "duration_minutes": 35,
-                    "calories": 320,
-                    "avg_heart_rate": 145,
-                    "distance_km": 5.2
-                }
-            ],
-            "heart": {
-                "resting_hr": 62,
-                "avg_hr": 75,
-                "max_hr": 155,
-                "hrv": 42
-            },
-            "energy_level": 7  # 1-10 self-reported
-        }
-        """
+        """Receive and store health data from iOS HealthKit."""
         record = {
             "id": str(uuid.uuid4()),
             "user_id": user_id,
@@ -76,8 +38,6 @@ class HealthService:
         }
 
         health_data.setdefault(user_id, [])
-
-        # Replace existing record for same date
         health_data[user_id] = [
             r for r in health_data[user_id]
             if r["date"] != record["date"]
@@ -92,16 +52,13 @@ class HealthService:
         date: str | None = None,
         days: int = 7,
     ) -> list[dict]:
-        """Get health records, optionally filtered by date or last N days."""
         records = health_data.get(user_id, [])
         if date:
             return [r for r in records if r["date"] == date]
-        # Sort by date descending, return last N days
         records = sorted(records, key=lambda r: r["date"], reverse=True)
         return records[:days]
 
     async def get_today_snapshot(self, user_id: str) -> dict:
-        """Get today's health snapshot for the daily summary."""
         today = datetime.utcnow().strftime("%Y-%m-%d")
         records = await self.get_health_data(user_id, date=today)
         if not records:
@@ -113,21 +70,7 @@ class HealthService:
         heart = record.get("heart", {})
         workouts = record.get("workouts", [])
 
-        # Calculate simple energy score
-        energy_factors = []
-        if sleep.get("total_hours"):
-            sleep_score = min(100, (sleep["total_hours"] / 8.0) * 100)
-            energy_factors.append(sleep_score)
-        if sleep.get("quality_score"):
-            energy_factors.append(sleep["quality_score"])
-        if activity.get("steps"):
-            steps_score = min(100, (activity["steps"] / 10000) * 100)
-            energy_factors.append(steps_score)
-        if heart.get("hrv"):
-            hrv_score = min(100, (heart["hrv"] / 60) * 100)
-            energy_factors.append(hrv_score)
-
-        energy_score = int(sum(energy_factors) / len(energy_factors)) if energy_factors else None
+        energy_score = self._calc_energy_score(sleep, activity, heart)
 
         return {
             "available": True,
@@ -152,8 +95,333 @@ class HealthService:
             "self_reported_energy": record.get("energy_level"),
         }
 
+    # ==================== ATHLYTIC-STYLE ANALYTICS ====================
+
+    async def get_recovery_analysis(self, user_id: str) -> dict:
+        """Athlytic-style recovery score based on sleep, HRV, resting HR."""
+        today = datetime.utcnow().strftime("%Y-%m-%d")
+        records = await self.get_health_data(user_id, date=today)
+        history = await self.get_health_data(user_id, days=14)
+
+        if not records:
+            return {"available": False}
+
+        record = records[0]
+        sleep = record.get("sleep", {})
+        heart = record.get("heart", {})
+
+        # HRV baseline (14-day avg)
+        hrvs = [r.get("heart", {}).get("hrv", 0) for r in history if r.get("heart", {}).get("hrv")]
+        hrv_baseline = sum(hrvs) / len(hrvs) if hrvs else 45
+        current_hrv = heart.get("hrv", 0)
+
+        # Resting HR baseline
+        rhrs = [r.get("heart", {}).get("resting_hr", 0) for r in history if r.get("heart", {}).get("resting_hr")]
+        rhr_baseline = sum(rhrs) / len(rhrs) if rhrs else 65
+        current_rhr = heart.get("resting_hr", 0)
+
+        # Recovery components
+        hrv_score = min(100, max(0, int((current_hrv / hrv_baseline) * 60))) if hrv_baseline else 50
+        rhr_score = min(100, max(0, int((rhr_baseline / max(current_rhr, 40)) * 50))) if current_rhr else 50
+        sleep_score = self._calc_sleep_score(sleep)
+
+        recovery_score = int(hrv_score * 0.4 + sleep_score * 0.4 + rhr_score * 0.2)
+        recovery_score = min(100, max(0, recovery_score))
+
+        # Recovery zone
+        if recovery_score >= 67:
+            zone = "green"
+            zone_label = "Well Recovered"
+            recommendation = "You're well-recovered. Great day for high-intensity training or deep work."
+        elif recovery_score >= 34:
+            zone = "yellow"
+            zone_label = "Moderate Recovery"
+            recommendation = "Moderate recovery. Consider lighter training. Focus on steady-state cardio or skill work."
+        else:
+            zone = "red"
+            zone_label = "Low Recovery"
+            recommendation = "Recovery is low. Prioritize rest, gentle movement, and sleep tonight."
+
+        return {
+            "available": True,
+            "date": today,
+            "recovery_score": recovery_score,
+            "zone": zone,
+            "zone_label": zone_label,
+            "recommendation": recommendation,
+            "components": {
+                "hrv": {"score": hrv_score, "current": current_hrv, "baseline": round(hrv_baseline, 1)},
+                "resting_hr": {"score": rhr_score, "current": current_rhr, "baseline": round(rhr_baseline, 1)},
+                "sleep": {"score": sleep_score, "hours": sleep.get("total_hours", 0), "quality": sleep.get("quality_score", 0)},
+            },
+        }
+
+    async def get_battery_readiness(self, user_id: str) -> dict:
+        """Battery/readiness gauge — how much capacity you have today."""
+        recovery = await self.get_recovery_analysis(user_id)
+        if not recovery.get("available"):
+            return {"available": False}
+
+        today = datetime.utcnow().strftime("%Y-%m-%d")
+        records = await self.get_health_data(user_id, date=today)
+        record = records[0] if records else {}
+
+        activity = record.get("activity", {})
+        workouts = record.get("workouts", [])
+
+        # Strain from today's activity
+        strain = self._calc_strain(activity, workouts)
+
+        # Battery = recovery - strain used
+        battery_start = recovery["recovery_score"]
+        battery_used = min(strain, battery_start)
+        battery_remaining = max(0, battery_start - battery_used)
+
+        # Capacity recommendations
+        if battery_remaining >= 60:
+            capacity = "high"
+            advice = "High capacity remaining. Good time for intense workout or demanding mental work."
+        elif battery_remaining >= 30:
+            capacity = "medium"
+            advice = "Moderate capacity. Maintain current pace. Avoid adding major stressors."
+        else:
+            capacity = "low"
+            advice = "Battery low. Wind down activity. Focus on recovery and lighter tasks."
+
+        return {
+            "available": True,
+            "date": today,
+            "battery_start": battery_start,
+            "battery_remaining": battery_remaining,
+            "battery_used": battery_used,
+            "strain_today": strain,
+            "capacity": capacity,
+            "advice": advice,
+            "breakdown": {
+                "recovery_contribution": battery_start,
+                "activity_drain": battery_used,
+                "workout_strain": sum(self._workout_strain(w) for w in workouts),
+                "step_strain": min(20, int(activity.get("steps", 0) / 500)),
+            },
+        }
+
+    async def get_sleep_analysis(self, user_id: str) -> dict:
+        """Detailed sleep analysis — Athlytic-style sleep breakdown."""
+        today = datetime.utcnow().strftime("%Y-%m-%d")
+        records = await self.get_health_data(user_id, date=today)
+        history = await self.get_health_data(user_id, days=7)
+
+        if not records:
+            return {"available": False}
+
+        sleep = records[0].get("sleep", {})
+        if not sleep.get("total_hours"):
+            return {"available": False, "reason": "no_sleep_data"}
+
+        total = sleep.get("total_hours", 0)
+        deep = sleep.get("deep_hours", 0)
+        rem = sleep.get("rem_hours", 0)
+        light = sleep.get("light_hours", total - deep - rem)
+
+        # Sleep score
+        score = self._calc_sleep_score(sleep)
+
+        # Ideal ranges
+        deep_pct = (deep / total * 100) if total else 0
+        rem_pct = (rem / total * 100) if total else 0
+        light_pct = (light / total * 100) if total else 0
+
+        # Sleep consistency (7-day)
+        sleep_times = [r.get("sleep", {}).get("total_hours", 0) for r in history if r.get("sleep", {}).get("total_hours")]
+        avg_sleep = sum(sleep_times) / len(sleep_times) if sleep_times else total
+        consistency = max(0, 100 - int(abs(total - avg_sleep) / avg_sleep * 100 * 3)) if avg_sleep else 100
+
+        # Insights
+        insights = []
+        if deep_pct < 15:
+            insights.append({"type": "warning", "text": "Deep sleep is low. Avoid alcohol and screens before bed."})
+        elif deep_pct >= 20:
+            insights.append({"type": "positive", "text": "Excellent deep sleep! Great for physical recovery."})
+        if rem_pct < 20:
+            insights.append({"type": "warning", "text": "REM sleep is low. This affects memory consolidation and creativity."})
+        elif rem_pct >= 25:
+            insights.append({"type": "positive", "text": "Strong REM sleep. Great for learning and emotional processing."})
+        if total < 7:
+            insights.append({"type": "warning", "text": f"Only {total:.1f}h of sleep. Aim for 7-9 hours."})
+        elif total >= 7:
+            insights.append({"type": "positive", "text": f"Good sleep duration at {total:.1f} hours."})
+        if consistency < 70:
+            insights.append({"type": "warning", "text": "Sleep schedule is inconsistent. Try a regular bedtime."})
+
+        return {
+            "available": True,
+            "date": today,
+            "score": score,
+            "total_hours": total,
+            "stages": {
+                "deep": {"hours": round(deep, 1), "percent": round(deep_pct, 1), "ideal_range": "15-25%"},
+                "rem": {"hours": round(rem, 1), "percent": round(rem_pct, 1), "ideal_range": "20-25%"},
+                "light": {"hours": round(light, 1), "percent": round(light_pct, 1), "ideal_range": "50-60%"},
+            },
+            "bed_time": sleep.get("bed_time"),
+            "wake_time": sleep.get("wake_time"),
+            "quality_score": sleep.get("quality_score"),
+            "consistency": consistency,
+            "avg_sleep_7d": round(avg_sleep, 1),
+            "insights": insights,
+        }
+
+    async def get_strain_tracking(self, user_id: str) -> dict:
+        """Daily strain tracking — how hard you pushed today."""
+        today = datetime.utcnow().strftime("%Y-%m-%d")
+        records = await self.get_health_data(user_id, date=today)
+        history = await self.get_health_data(user_id, days=7)
+
+        if not records:
+            return {"available": False}
+
+        record = records[0]
+        activity = record.get("activity", {})
+        workouts = record.get("workouts", [])
+        heart = record.get("heart", {})
+
+        strain = self._calc_strain(activity, workouts)
+
+        # Strain by category
+        workout_strains = []
+        for w in workouts:
+            ws = self._workout_strain(w)
+            workout_strains.append({
+                "type": w.get("type", "unknown"),
+                "duration_minutes": w.get("duration_minutes", 0),
+                "calories": w.get("calories", 0),
+                "strain": ws,
+                "avg_hr": w.get("avg_heart_rate"),
+            })
+
+        # Weekly strain history
+        weekly_strains = []
+        for r in sorted(history, key=lambda x: x["date"]):
+            a = r.get("activity", {})
+            w = r.get("workouts", [])
+            weekly_strains.append({
+                "date": r["date"],
+                "strain": self._calc_strain(a, w),
+            })
+
+        # Optimal strain zone based on recovery
+        recovery = await self.get_recovery_analysis(user_id)
+        recovery_score = recovery.get("recovery_score", 50)
+        optimal_max = int(recovery_score * 0.8)
+
+        if strain > optimal_max:
+            strain_status = "overreaching"
+            strain_advice = "You've exceeded optimal strain. Prioritize recovery."
+        elif strain >= optimal_max * 0.5:
+            strain_status = "optimal"
+            strain_advice = "Great balance of effort and recovery."
+        else:
+            strain_status = "under_trained"
+            strain_advice = "Room for more activity. Consider adding a workout."
+
+        return {
+            "available": True,
+            "date": today,
+            "strain_score": strain,
+            "max_hr_today": heart.get("max_hr"),
+            "avg_hr_today": heart.get("avg_hr"),
+            "strain_status": strain_status,
+            "strain_advice": strain_advice,
+            "optimal_strain_range": [int(optimal_max * 0.4), optimal_max],
+            "workouts": workout_strains,
+            "steps": activity.get("steps", 0),
+            "active_calories": activity.get("active_calories", 0),
+            "active_minutes": activity.get("active_minutes", 0),
+            "weekly_strain": weekly_strains,
+        }
+
+    async def get_hrv_analysis(self, user_id: str) -> dict:
+        """Deep HRV analysis with trends and insights."""
+        history = await self.get_health_data(user_id, days=30)
+        hrvs = []
+        for r in sorted(history, key=lambda x: x["date"]):
+            hrv = r.get("heart", {}).get("hrv")
+            if hrv:
+                hrvs.append({"date": r["date"], "hrv": hrv, "resting_hr": r.get("heart", {}).get("resting_hr")})
+
+        if not hrvs:
+            return {"available": False}
+
+        values = [h["hrv"] for h in hrvs]
+        current = values[-1] if values else 0
+        baseline = sum(values) / len(values) if values else 0
+        high = max(values)
+        low = min(values)
+
+        # Variability (CV)
+        if len(values) >= 2:
+            mean = sum(values) / len(values)
+            variance = sum((v - mean) ** 2 for v in values) / len(values)
+            cv = (math.sqrt(variance) / mean * 100) if mean else 0
+        else:
+            cv = 0
+
+        # Trend
+        trend_7d = self._trend(values[-7:]) if len(values) >= 7 else None
+        trend_30d = self._trend(values) if len(values) >= 8 else None
+
+        # Status
+        if current >= baseline * 1.1:
+            status = "above_baseline"
+            interpretation = "HRV is above your baseline. Your body is well-recovered and adapting positively."
+        elif current >= baseline * 0.9:
+            status = "at_baseline"
+            interpretation = "HRV is normal. You're in a balanced state."
+        else:
+            status = "below_baseline"
+            interpretation = "HRV is below baseline. This may indicate accumulated stress, poor sleep, or overtraining."
+
+        return {
+            "available": True,
+            "current": current,
+            "baseline": round(baseline, 1),
+            "high_30d": high,
+            "low_30d": low,
+            "coefficient_of_variation": round(cv, 1),
+            "status": status,
+            "interpretation": interpretation,
+            "trend_7d": trend_7d,
+            "trend_30d": trend_30d,
+            "history": hrvs[-14:],  # Last 14 data points
+        }
+
+    async def get_full_dashboard(self, user_id: str) -> dict:
+        """Complete Athlytic-style dashboard in one call."""
+        recovery = await self.get_recovery_analysis(user_id)
+        battery = await self.get_battery_readiness(user_id)
+        sleep = await self.get_sleep_analysis(user_id)
+        strain = await self.get_strain_tracking(user_id)
+        hrv = await self.get_hrv_analysis(user_id)
+        snapshot = await self.get_today_snapshot(user_id)
+        goals = await self.get_goal_progress(user_id)
+        trends = await self.get_weekly_trends(user_id)
+
+        return {
+            "available": recovery.get("available", False),
+            "date": datetime.utcnow().strftime("%Y-%m-%d"),
+            "recovery": recovery,
+            "battery": battery,
+            "sleep": sleep,
+            "strain": strain,
+            "hrv": hrv,
+            "snapshot": snapshot,
+            "goals": goals,
+            "trends": trends,
+        }
+
+    # ==================== EXISTING METHODS ====================
+
     async def get_weekly_trends(self, user_id: str) -> dict:
-        """Calculate weekly health trends for coaching insights."""
         records = await self.get_health_data(user_id, days=7)
         if not records:
             return {"available": False}
@@ -181,19 +449,6 @@ class HealthService:
         }
 
     async def set_goals(self, user_id: str, goals: dict) -> dict:
-        """Set health & energy goals.
-
-        Example:
-        {
-            "sleep_hours": 8,
-            "steps": 10000,
-            "active_minutes": 60,
-            "workout_days_per_week": 4,
-            "water_liters": 2.5,
-            "bedtime": "23:00",
-            "wake_time": "06:30"
-        }
-        """
         health_goals[user_id] = {
             "user_id": user_id,
             "updated_at": datetime.utcnow().isoformat(),
@@ -210,7 +465,6 @@ class HealthService:
         })
 
     async def get_goal_progress(self, user_id: str) -> dict:
-        """Compare today's data vs goals."""
         today = await self.get_today_snapshot(user_id)
         goals = await self.get_goals(user_id)
 
@@ -248,8 +502,109 @@ class HealthService:
 
         return progress
 
+    # ==================== SCORING HELPERS ====================
+
+    def _calc_energy_score(self, sleep: dict, activity: dict, heart: dict) -> int | None:
+        factors = []
+        if sleep.get("total_hours"):
+            factors.append(min(100, (sleep["total_hours"] / 8.0) * 100))
+        if sleep.get("quality_score"):
+            factors.append(sleep["quality_score"])
+        if activity.get("steps"):
+            factors.append(min(100, (activity["steps"] / 10000) * 100))
+        if heart.get("hrv"):
+            factors.append(min(100, (heart["hrv"] / 60) * 100))
+        return int(sum(factors) / len(factors)) if factors else None
+
+    def _calc_sleep_score(self, sleep: dict) -> int:
+        """Calculate sleep score 0-100 based on duration, stages, quality."""
+        score = 0
+        total = sleep.get("total_hours", 0)
+
+        # Duration (40 pts)
+        if total >= 8:
+            score += 40
+        elif total >= 7:
+            score += 35
+        elif total >= 6:
+            score += 25
+        elif total >= 5:
+            score += 15
+        else:
+            score += 5
+
+        # Quality (30 pts)
+        quality = sleep.get("quality_score", 0)
+        score += int(quality * 0.3)
+
+        # Deep sleep (15 pts)
+        deep = sleep.get("deep_hours", 0)
+        if total > 0:
+            deep_pct = deep / total * 100
+            if deep_pct >= 20:
+                score += 15
+            elif deep_pct >= 15:
+                score += 10
+            elif deep_pct >= 10:
+                score += 5
+
+        # REM (15 pts)
+        rem = sleep.get("rem_hours", 0)
+        if total > 0:
+            rem_pct = rem / total * 100
+            if rem_pct >= 25:
+                score += 15
+            elif rem_pct >= 20:
+                score += 10
+            elif rem_pct >= 15:
+                score += 5
+
+        return min(100, max(0, score))
+
+    def _calc_strain(self, activity: dict, workouts: list) -> int:
+        """Calculate daily strain score 0-100."""
+        strain = 0
+
+        # Steps contribution (max 20)
+        steps = activity.get("steps", 0)
+        strain += min(20, int(steps / 500))
+
+        # Active calories (max 20)
+        cals = activity.get("active_calories", 0)
+        strain += min(20, int(cals / 25))
+
+        # Active minutes (max 15)
+        mins = activity.get("active_minutes", 0)
+        strain += min(15, int(mins / 4))
+
+        # Workouts (max 45)
+        for w in workouts:
+            strain += self._workout_strain(w)
+
+        return min(100, strain)
+
+    def _workout_strain(self, workout: dict) -> int:
+        """Calculate strain from a single workout."""
+        duration = workout.get("duration_minutes", 0)
+        calories = workout.get("calories", 0)
+        avg_hr = workout.get("avg_heart_rate", 0)
+
+        # Base strain from duration
+        base = min(15, int(duration / 5))
+
+        # Intensity multiplier from HR
+        if avg_hr >= 160:
+            multiplier = 1.5
+        elif avg_hr >= 140:
+            multiplier = 1.3
+        elif avg_hr >= 120:
+            multiplier = 1.1
+        else:
+            multiplier = 1.0
+
+        return min(20, int(base * multiplier))
+
     def _trend(self, values: list) -> str | None:
-        """Simple trend: compare first half vs second half averages."""
         if len(values) < 4:
             return None
         mid = len(values) // 2

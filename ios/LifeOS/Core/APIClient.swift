@@ -206,6 +206,46 @@ class APIClient {
         return try await post("/health/goals", body: goals)
     }
 
+    func getHealthDashboard() async throws -> HealthDashboard {
+        return try await get("/health/dashboard")
+    }
+
+    func getRecoveryAnalysis() async throws -> RecoveryAnalysis {
+        return try await get("/health/recovery")
+    }
+
+    func getSleepAnalysis() async throws -> SleepAnalysis {
+        return try await get("/health/sleep")
+    }
+
+    func getStrainTracking() async throws -> StrainTracking {
+        return try await get("/health/strain")
+    }
+
+    func getHRVAnalysis() async throws -> HRVAnalysis {
+        return try await get("/health/hrv")
+    }
+
+    // MARK: - Mentor Chat
+
+    func sendMentorMessage(message: String, voiceTranscript: String? = nil) async throws -> ChatResponse {
+        var body: [String: Any] = ["message": message]
+        if let vt = voiceTranscript { body["voice_transcript"] = vt }
+        return try await post("/mentor/chat", body: body)
+    }
+
+    func getMentorHistory(limit: Int = 50) async throws -> ChatHistory {
+        return try await get("/mentor/history?limit=\(limit)")
+    }
+
+    func getMentorInsight() async throws -> MentorInsight {
+        return try await get("/mentor/insight")
+    }
+
+    func clearMentorHistory() async throws -> EmptyResponse {
+        return try await delete("/mentor/history")
+    }
+
     // MARK: - Finance
 
     func getFinanceSummary(month: String? = nil) async throws -> FinanceMonthlySummary {

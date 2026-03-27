@@ -934,3 +934,195 @@ struct NotificationPreferences: Codable {
         case financeAlerts = "finance_alerts"
     }
 }
+
+// MARK: - Health Dashboard (Athlytic-style)
+
+struct HealthDashboard: Codable {
+    let available: Bool
+    let date: String?
+    let recovery: RecoveryAnalysis?
+    let battery: BatteryReadiness?
+    let sleep: SleepAnalysis?
+    let strain: StrainTracking?
+    let hrv: HRVAnalysis?
+    let snapshot: HealthTodaySnapshot?
+    let goals: HealthGoalProgress?
+    let trends: HealthWeeklyTrends?
+}
+
+struct RecoveryAnalysis: Codable {
+    let available: Bool
+    let recoveryScore: Int
+    let zone: String
+    let zoneLabel: String
+    let recommendation: String
+
+    enum CodingKeys: String, CodingKey {
+        case available
+        case recoveryScore = "recovery_score"
+        case zone
+        case zoneLabel = "zone_label"
+        case recommendation
+    }
+}
+
+struct BatteryReadiness: Codable {
+    let available: Bool
+    let batteryStart: Int
+    let batteryRemaining: Int
+    let batteryUsed: Int
+    let strainToday: Int
+    let capacity: String
+    let advice: String
+
+    enum CodingKeys: String, CodingKey {
+        case available
+        case batteryStart = "battery_start"
+        case batteryRemaining = "battery_remaining"
+        case batteryUsed = "battery_used"
+        case strainToday = "strain_today"
+        case capacity, advice
+    }
+}
+
+struct SleepAnalysis: Codable {
+    let available: Bool
+    let score: Int
+    let totalHours: Double
+    let stages: SleepStages?
+    let bedTime: String?
+    let wakeTime: String?
+    let consistency: Int
+    let avgSleep7d: Double
+    let insights: [SleepInsight]?
+
+    enum CodingKeys: String, CodingKey {
+        case available, score, stages, insights, consistency
+        case totalHours = "total_hours"
+        case bedTime = "bed_time"
+        case wakeTime = "wake_time"
+        case avgSleep7d = "avg_sleep_7d"
+    }
+}
+
+struct SleepStages: Codable {
+    let deep: SleepStage
+    let rem: SleepStage
+    let light: SleepStage
+}
+
+struct SleepStage: Codable {
+    let hours: Double
+    let percent: Double
+    let idealRange: String
+
+    enum CodingKeys: String, CodingKey {
+        case hours, percent
+        case idealRange = "ideal_range"
+    }
+}
+
+struct SleepInsight: Codable {
+    let type: String
+    let text: String
+}
+
+struct StrainTracking: Codable {
+    let available: Bool
+    let strainScore: Int
+    let strainStatus: String
+    let strainAdvice: String
+    let steps: Int
+    let activeCalories: Int
+    let activeMinutes: Int
+    let workouts: [WorkoutStrain]
+
+    enum CodingKeys: String, CodingKey {
+        case available, steps, workouts
+        case strainScore = "strain_score"
+        case strainStatus = "strain_status"
+        case strainAdvice = "strain_advice"
+        case activeCalories = "active_calories"
+        case activeMinutes = "active_minutes"
+    }
+}
+
+struct WorkoutStrain: Codable {
+    let type: String
+    let durationMinutes: Int
+    let calories: Int
+    let strain: Int
+
+    enum CodingKeys: String, CodingKey {
+        case type, calories, strain
+        case durationMinutes = "duration_minutes"
+    }
+}
+
+struct HRVAnalysis: Codable {
+    let available: Bool
+    let current: Int
+    let baseline: Double
+    let high30d: Int
+    let low30d: Int
+    let cv: Double
+    let status: String
+    let interpretation: String
+    let trend7d: String?
+    let trend30d: String?
+    let history: [HRVPoint]
+
+    enum CodingKeys: String, CodingKey {
+        case available, current, baseline, status, interpretation, history
+        case high30d = "high_30d"
+        case low30d = "low_30d"
+        case cv = "coefficient_of_variation"
+        case trend7d = "trend_7d"
+        case trend30d = "trend_30d"
+    }
+}
+
+struct HRVPoint: Codable {
+    let date: String
+    let hrv: Int
+}
+
+// MARK: - Mentor Chat
+
+struct ChatMessage: Codable, Identifiable {
+    let id: String
+    let role: String
+    let content: String
+    let timestamp: String?
+}
+
+struct ChatResponse: Codable {
+    let message: ChatMessage?
+    let totalMessages: Int?
+
+    enum CodingKeys: String, CodingKey {
+        case message
+        case totalMessages = "total_messages"
+    }
+}
+
+struct ChatHistory: Codable {
+    let messages: [ChatMessage]
+    let total: Int
+    let hasMore: Bool?
+
+    enum CodingKeys: String, CodingKey {
+        case messages, total
+        case hasMore = "has_more"
+    }
+}
+
+struct MentorInsight: Codable {
+    let insight: String?
+    let generatedAt: String?
+
+    enum CodingKeys: String, CodingKey {
+        case insight
+        case generatedAt = "generated_at"
+    }
+}

@@ -6,7 +6,7 @@ struct ContentView: View {
     @State private var selectedTab: Tab = .record
 
     enum Tab: String, CaseIterable {
-        case inbox, record, summary, health, finance, search, settings
+        case inbox, record, summary, health, mentor, finance, search, settings
 
         var icon: String {
             switch self {
@@ -14,6 +14,7 @@ struct ContentView: View {
             case .record: return "circle.fill"
             case .summary: return "text.alignleft"
             case .health: return "heart"
+            case .mentor: return "brain.head.profile"
             case .finance: return "banknote"
             case .search: return "magnifyingglass"
             case .settings: return "slider.horizontal.3"
@@ -37,6 +38,7 @@ struct ContentView: View {
                     case .record: RecordView()
                     case .summary: DailySummaryView()
                     case .health: HealthView()
+                    case .mentor: MentorChatView()
                     case .finance: FinanceView()
                     case .search: SearchView()
                     case .settings: SettingsView().environmentObject(appState)
